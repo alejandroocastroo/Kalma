@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { payments } from '@/lib/api'
+import { payments, reports } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
@@ -12,7 +12,7 @@ import { formatCOP, categoryLabels, paymentMethodLabels } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, BarChart, Bar, XAxis, YAxis } from 'recharts'
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
 
@@ -45,12 +45,23 @@ export default function CajaPage() {
     },
   })
 
+  const { data: revenueBySpace = [], isLoading: loadingRevenue } = useQuery({
+    queryKey: ['revenue-by-space', params],
+    queryFn: () => reports.revenue({ from: startDate, to: endDate }),
+  })
+
   const chartData = summary
     ? Object.entries(summary.by_category || {}).map(([key, val]) => ({
         name: categoryLabels[key] || key,
         value: Number(val),
       }))
     : []
+
+  const revenueChartData = revenueBySpace.map((r) => ({
+    name: r.space_name,
+    revenue: r.total_revenue,
+    sessions: r.session_count,
+  }))
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['payments'] })
@@ -161,6 +172,29 @@ export default function CajaPage() {
           </Table>
         </div>
       </div>
+
+      {/* Revenue by space */}
+      {(loadingRevenue || revenueBySpace.length > 0) && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <p className="text-sm font-semibold text-gray-700 mb-4">Ingresos por espacio</p>
+          {loadingRevenue ? (
+            <p className="text-gray-400 text-sm">Cargando...</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <BarChart data={revenueChartData} layout="vertical" margin={{ left: 16, right: 24, top: 0, bottom: 0 }}>
+                <XAxis
+                  type="number"
+                  tickFormatter={(v: number) => formatCOP(v)}
+                  tick={{ fontSize: 11 }}
+                />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={96} />
+                <Tooltip formatter={(v: number) => [formatCOP(v), 'Ingresos']} />
+                <Bar dataKey="revenue" fill="#6366f1" radius={[0, 6, 6, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+      )}
 
       {/* Income modal */}
       <Dialog open={showIncome} onOpenChange={setShowIncome}>

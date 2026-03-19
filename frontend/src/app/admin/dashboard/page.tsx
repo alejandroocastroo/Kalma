@@ -1,8 +1,9 @@
 'use client'
 import { useQuery } from '@tanstack/react-query'
-import { classSessions, payments, clients, appointments } from '@/lib/api'
+import { classSessions, payments, clients, appointments, reports } from '@/lib/api'
 import { StatsCard } from '@/components/admin/stats-card'
 import { SessionCard } from '@/components/admin/session-card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { formatCOP, formatDateTime, appointmentStatusConfig } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp, Plus } from 'lucide-react'
@@ -33,6 +34,12 @@ export default function DashboardPage() {
   const { data: recentAppointments, isLoading: loadingAppts } = useQuery({
     queryKey: ['recent-appointments'],
     queryFn: () => appointments.list(),
+  })
+
+  const todayStr = format(today, 'yyyy-MM-dd')
+  const { data: occupancyData = [], isLoading: loadingOccupancy } = useQuery({
+    queryKey: ['occupancy-today', todayStr],
+    queryFn: () => reports.occupancy({ from: todayStr, to: todayStr }),
   })
 
   // Filtrar sesiones de hoy
@@ -152,6 +159,52 @@ export default function DashboardPage() {
                     </p>
                   </div>
                   <Badge className={statusCfg?.className}>{statusCfg?.label || appt.status}</Badge>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Space occupancy today */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+        <h3 className="text-base font-semibold text-gray-900 mb-4">Ocupación por espacio hoy</h3>
+        {loadingOccupancy ? (
+          <div className="space-y-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="space-y-2">
+                <Skeleton className="h-4 w-40" />
+                <Skeleton className="h-3 w-full" />
+              </div>
+            ))}
+          </div>
+        ) : occupancyData.length === 0 ? (
+          <p className="text-gray-400 text-sm">Sin datos de ocupación para hoy</p>
+        ) : (
+          <div className="space-y-4">
+            {occupancyData.map((item) => {
+              const fillPercent = Math.round(item.avg_fill_rate * 100)
+              return (
+                <div key={item.space_id}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-sm font-medium text-gray-800">{item.space_name}</p>
+                    <span className="text-xs font-semibold text-gray-600">{fillPercent}%</span>
+                  </div>
+                  {/* Progress bar */}
+                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-primary-500 rounded-full transition-all duration-500"
+                      style={{ width: `${fillPercent}%` }}
+                    />
+                  </div>
+                  <div className="flex gap-4 mt-1.5 text-xs text-gray-500">
+                    <span>{item.total_sessions} sesiones hoy</span>
+                    {item.fully_booked_count > 0 && (
+                      <span className="text-orange-600 font-medium">
+                        {item.fully_booked_count} llenas
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}

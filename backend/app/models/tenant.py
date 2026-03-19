@@ -29,3 +29,4 @@ class Tenant(Base, TimestampMixin):
     class_types = relationship("ClassType", back_populates="tenant", lazy="noload")
     class_sessions = relationship("ClassSession", back_populates="tenant", lazy="noload")
     clients = relationship("Client", back_populates="tenant", lazy="noload")
+    spaces = relationship("Space", back_populates="tenant", lazy="noload")

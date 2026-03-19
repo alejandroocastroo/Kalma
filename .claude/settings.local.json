@@ -1,6 +1,16 @@
 {
   "permissions": {
-    "defaultMode": "bypassPermissions",
+    "allow": [
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MGZiMDJlYy1lN2Q4LTQ0YmUtOTI5Mi03Yzc3NDAwZjg5YmYiLCJleHAiOjE3NzM5ODY0NzgsInR5cGUiOiJhY2Nlc3MifQ.-tDCKWaNZLFHiUZqn9DOq-8VKTJfnWvqkqcLCHZXGn4\" __NEW_LINE_1b81e35b2680dddd__ echo \"=== GET /spaces ===\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MGZiMDJlYy1lN2Q4LTQ0YmUtOTI5Mi03Yzc3NDAwZjg5YmYiLCJleHAiOjE3NzM5ODY0NzgsInR5cGUiOiJhY2Nlc3MifQ.-tDCKWaNZLFHiUZqn9DOq-8VKTJfnWvqkqcLCHZXGn4\")",
+      "Bash(SPACE_ID=\"a37b3665-eede-4180-9402-15ea07b16f81\")",
+      "Bash(__NEW_LINE_84f594bc3a7da569__ echo:*)",
+      "Bash(__NEW_LINE_297b50eaccfbfb89__ echo:*)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MGZiMDJlYy1lN2Q4LTQ0YmUtOTI5Mi03Yzc3NDAwZjg5YmYiLCJleHAiOjE3NzM5ODY0NzgsInR5cGUiOiJhY2Nlc3MifQ.-tDCKWaNZLFHiUZqn9DOq-8VKTJfnWvqkqcLCHZXGn4\" __NEW_LINE_a7229986500ec453__ echo \"=== POST /spaces \\(create\\) ===\")",
+      "Bash(ls:*)",
+      "Bash(npx tsc:*)"
+    ],
     "deny": [
       "Bash(git commit*)",
       "Bash(git push*)",
@@ -10,6 +20,7 @@
       "Bash(git reset*)",
       "Bash(git stash*)",
       "Bash(git tag*)"
-    ]
+    ],
+    "defaultMode": "bypassPermissions"
   }
 }

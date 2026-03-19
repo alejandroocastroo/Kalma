@@ -2,12 +2,13 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from app.schemas.class_type import ClassTypeResponse
 
 
 class ClassSessionCreate(BaseModel):
     class_type_id: uuid.UUID
+    space_id: Optional[uuid.UUID] = None
     instructor_id: Optional[uuid.UUID] = None
     start_datetime: datetime
     end_datetime: datetime
@@ -16,6 +17,7 @@ class ClassSessionCreate(BaseModel):
 
 
 class ClassSessionUpdate(BaseModel):
+    space_id: Optional[uuid.UUID] = None
     instructor_id: Optional[uuid.UUID] = None
     start_datetime: Optional[datetime] = None
     end_datetime: Optional[datetime] = None
@@ -28,6 +30,7 @@ class ClassSessionResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     class_type_id: uuid.UUID
+    space_id: Optional[uuid.UUID] = None
     instructor_id: Optional[uuid.UUID] = None
     start_datetime: datetime
     end_datetime: datetime
@@ -41,3 +44,31 @@ class ClassSessionResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class QuickBookRequest(BaseModel):
+    class_type_id: uuid.UUID
+    start_datetime: datetime
+    duration_minutes: int = 60
+    capacity: int = 8
+    space_id: Optional[uuid.UUID] = None
+    client_id: Optional[uuid.UUID] = None
+
+    @field_validator("duration_minutes")
+    @classmethod
+    def duration_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("duration_minutes must be greater than 0")
+        return v
+
+    @field_validator("capacity")
+    @classmethod
+    def capacity_must_be_positive(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("capacity must be greater than 0")
+        return v
+
+
+class QuickBookResponse(BaseModel):
+    session: ClassSessionResponse
+    appointment: Optional[dict] = None

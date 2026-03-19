@@ -8,9 +8,18 @@ from typing import List, Optional
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
-from app.schemas.class_session import ClassSessionCreate, ClassSessionUpdate, ClassSessionResponse
+from app.schemas.class_session import (
+    ClassSessionCreate,
+    ClassSessionUpdate,
+    ClassSessionResponse,
+    QuickBookRequest,
+    QuickBookResponse,
+)
+from app.schemas.appointment import AppointmentResponse
 from app.models.class_session import ClassSession
 from app.models.class_type import ClassType
+from app.models.appointment import Appointment
+from app.models.client import Client
 from app.models.user import User
 
 router = APIRouter(prefix="/class-sessions", tags=["Sesiones de Clase"])
@@ -95,6 +104,108 @@ async def create_session(
     await db.commit()
     await db.refresh(session)
     return await _enrich(session, db)
+
+
+@router.post("/quick-book", response_model=QuickBookResponse, status_code=201)
+async def quick_book(
+    body: QuickBookRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Atomically create a class session and, when client_id is provided,
+    book that client into the session in a single DB transaction.
+    """
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+
+    # 1. Validate class_type belongs to this tenant
+    result = await db.execute(
+        select(ClassType).where(
+            ClassType.id == body.class_type_id,
+            ClassType.tenant_id == current_user.tenant_id,
+        )
+    )
+    class_type = result.scalar_one_or_none()
+    if not class_type:
+        raise HTTPException(404, "Tipo de clase no encontrado")
+
+    # 2. Validate client belongs to this tenant (when provided)
+    client: Client | None = None
+    if body.client_id is not None:
+        result = await db.execute(
+            select(Client).where(
+                Client.id == body.client_id,
+                Client.tenant_id == current_user.tenant_id,
+            )
+        )
+        client = result.scalar_one_or_none()
+        if not client:
+            raise HTTPException(404, "Cliente no encontrado")
+
+    # 3. Capacity sanity-check: booking 1 client into a brand-new session
+    if body.client_id is not None and body.capacity < 1:
+        raise HTTPException(400, "La sesión no tiene capacidad disponible")
+
+    # 4. Create the session
+    end_datetime = body.start_datetime + timedelta(minutes=body.duration_minutes)
+    session = ClassSession(
+        tenant_id=current_user.tenant_id,
+        class_type_id=body.class_type_id,
+        space_id=body.space_id,
+        start_datetime=body.start_datetime,
+        end_datetime=end_datetime,
+        capacity=body.capacity,
+        enrolled_count=0,
+        status="scheduled",
+    )
+    db.add(session)
+    # Flush to get session.id without committing yet
+    await db.flush()
+
+    # 5. Create appointment if client_id was provided
+    appt: Appointment | None = None
+    if body.client_id is not None:
+        # Check for duplicate (should not exist for a brand-new session, but
+        # guard against concurrent requests or future reuse of this logic)
+        dup_result = await db.execute(
+            select(Appointment).where(
+                Appointment.class_session_id == session.id,
+                Appointment.client_id == body.client_id,
+            )
+        )
+        if dup_result.scalar_one_or_none() is not None:
+            raise HTTPException(409, "El cliente ya tiene una cita en esta sesión")
+
+        appt = Appointment(
+            tenant_id=current_user.tenant_id,
+            class_session_id=session.id,
+            client_id=body.client_id,
+            status="confirmed",
+            paid=False,
+        )
+        db.add(appt)
+        session.enrolled_count += 1
+
+    # 6. Commit everything atomically
+    await db.commit()
+    await db.refresh(session)
+    if appt is not None:
+        await db.refresh(appt)
+
+    # 7. Build enriched response
+    enriched_session = await _enrich(session, db)
+
+    enriched_appt: dict | None = None
+    if appt is not None:
+        enriched_appt = AppointmentResponse.model_validate(appt).model_dump()
+        if client is not None:
+            enriched_appt["client_name"] = client.full_name
+            enriched_appt["client_phone"] = client.phone
+        enriched_appt["session_start"] = session.start_datetime
+        enriched_appt["class_type_name"] = class_type.name
+
+    return QuickBookResponse(session=enriched_session, appointment=enriched_appt)
 
 
 @router.put("/{session_id}", response_model=ClassSessionResponse)

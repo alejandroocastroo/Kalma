@@ -13,6 +13,7 @@ class ClassSession(Base, TimestampMixin):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
     class_type_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("class_types.id"), nullable=False)
+    space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True, index=True)
     instructor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     end_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -23,5 +24,6 @@ class ClassSession(Base, TimestampMixin):
 
     tenant = relationship("Tenant", back_populates="class_sessions", lazy="noload")
     class_type = relationship("ClassType", back_populates="sessions", lazy="noload")
+    space = relationship("Space", back_populates="sessions", lazy="noload")
     instructor = relationship("User", lazy="noload")
     appointments = relationship("Appointment", back_populates="class_session", lazy="noload")

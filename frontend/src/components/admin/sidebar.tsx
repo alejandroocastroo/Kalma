@@ -1,8 +1,9 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useState, useEffect } from 'react'
 import {
-  LayoutDashboard, Calendar, Users, DollarSign, Dumbbell, Settings, LogOut, X
+  LayoutDashboard, Calendar, Users, DollarSign, Dumbbell, Building2, Settings, LogOut, X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getStoredUser } from '@/lib/auth'
@@ -14,6 +15,7 @@ const navItems = [
   { href: '/admin/clientes', icon: Users, label: 'Clientes' },
   { href: '/admin/caja', icon: DollarSign, label: 'Caja' },
   { href: '/admin/clases', icon: Dumbbell, label: 'Clases' },
+  { href: '/admin/espacios', icon: Building2, label: 'Espacios' },
 ]
 
 interface SidebarProps {
@@ -23,7 +25,12 @@ interface SidebarProps {
 
 export function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname()
-  const user = getStoredUser()
+  // Defer localStorage reads to after mount to avoid server/client hydration mismatch.
+  // On the server getStoredUser() returns null; on the client it returns real data,
+  // so we must not read it during the initial render pass.
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+  const user = mounted ? getStoredUser() : null
 
   return (
     <>

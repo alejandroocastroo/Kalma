@@ -172,3 +172,39 @@ export interface PublicSession {
     color: string
   }
 }
+
+export interface Space {
+  id: string
+  tenant_id: string
+  name: string
+  description?: string
+  capacity: number
+  price: number
+  currency: string
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SlotAvailability {
+  hour: number
+  booked: number
+  available: number
+  is_full: boolean
+}
+
+export interface RevenueReport {
+  space_id: string
+  space_name: string
+  total_revenue: number
+  session_count: number
+  paid_appointments: number
+}
+
+export interface OccupancyReport {
+  space_id: string
+  space_name: string
+  total_sessions: number
+  avg_fill_rate: number
+  fully_booked_count: number
+}

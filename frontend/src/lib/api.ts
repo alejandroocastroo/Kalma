@@ -2,7 +2,8 @@ import axios from 'axios'
 import { getToken, getTenantSlug, logout, setToken, setRefreshToken, getRefreshToken } from './auth'
 import type {
   LoginRequest, TokenResponse, ClassType, ClassSession, Client,
-  Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession
+  Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession,
+  Space, SlotAvailability, RevenueReport, OccupancyReport
 } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -142,6 +143,26 @@ export const payments = {
   delete: (id: string) => apiClient.delete(`/payments/${id}`).then((r) => r.data),
   summary: (params?: { start?: string; end?: string }) =>
     apiClient.get<CashFlowSummary>('/payments/summary', { params }).then((r) => r.data),
+}
+
+// ── Spaces ────────────────────────────────────────────────────
+export const spaces = {
+  list: () => apiClient.get<Space[]>('/spaces').then((r) => r.data),
+  create: (data: Partial<Space>) =>
+    apiClient.post<Space>('/spaces', data).then((r) => r.data),
+  update: (id: string, data: Partial<Space>) =>
+    apiClient.put<Space>(`/spaces/${id}`, data).then((r) => r.data),
+  delete: (id: string) => apiClient.delete(`/spaces/${id}`).then((r) => r.data),
+  availability: (id: string, date: string) =>
+    apiClient.get<SlotAvailability[]>(`/spaces/${id}/availability`, { params: { date } }).then((r) => r.data),
+}
+
+// ── Reports ───────────────────────────────────────────────────
+export const reports = {
+  revenue: (params?: { space_id?: string; from?: string; to?: string }) =>
+    apiClient.get<RevenueReport[]>('/reports/revenue', { params }).then((r) => r.data),
+  occupancy: (params?: { space_id?: string; from?: string; to?: string }) =>
+    apiClient.get<OccupancyReport[]>('/reports/occupancy', { params }).then((r) => r.data),
 }
 
 // ── Public (no auth) ──────────────────────────────────────────
