@@ -1,0 +1,51 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: kalma_backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://kalma:kalmapassword@db:5432/kalma
+      REDIS_URL: redis://redis:6379/0
+      SECRET_KEY: dev-secret-key-minimo-32-caracteres-ok
+      ENVIRONMENT: development
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  db:
+    image: postgres:16-alpine
+    container_name: kalma_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kalma
+      POSTGRES_PASSWORD: kalmapassword
+      POSTGRES_DB: kalma
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kalma -d kalma"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: kalma_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data_dev:
