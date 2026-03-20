@@ -93,6 +93,30 @@ async def update_appointment(
     return await _enrich(appt, db)
 
 
+@router.delete("/{appt_id}", status_code=200)
+async def delete_appointment(
+    appt_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == uuid.UUID(appt_id),
+            Appointment.tenant_id == current_user.tenant_id,
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if not appt:
+        raise HTTPException(404, "Cita no encontrada")
+    if appt.status != "cancelled":
+        session = await db.get(ClassSession, appt.class_session_id)
+        if session and session.enrolled_count > 0:
+            session.enrolled_count -= 1
+    await db.delete(appt)
+    await db.commit()
+    return {"message": "Cliente eliminado de la sesión"}
+
+
 @router.post("/{appt_id}/attend")
 async def mark_attended(
     appt_id: str,

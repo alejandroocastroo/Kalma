@@ -12,7 +12,7 @@ class ClassSession(Base, TimestampMixin):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)
-    class_type_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("class_types.id"), nullable=False)
+    class_type_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("class_types.id"), nullable=True)
     space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True, index=True)
     instructor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     start_datetime: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

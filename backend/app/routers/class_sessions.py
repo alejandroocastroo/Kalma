@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 
@@ -18,6 +18,7 @@ from app.schemas.class_session import (
 from app.schemas.appointment import AppointmentResponse
 from app.models.class_session import ClassSession
 from app.models.class_type import ClassType
+from app.models.space import Space
 from app.models.appointment import Appointment
 from app.models.client import Client
 from app.models.user import User
@@ -27,10 +28,19 @@ router = APIRouter(prefix="/class-sessions", tags=["Sesiones de Clase"])
 
 async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
     data = ClassSessionResponse.model_validate(session).model_dump()
-    ct = await db.get(ClassType, session.class_type_id)
-    if ct:
-        data["class_type_name"] = ct.name
-        data["class_type_color"] = ct.color
+    if session.class_type_id:
+        ct = await db.get(ClassType, session.class_type_id)
+        if ct:
+            data["class_type_name"] = ct.name
+            data["class_type_color"] = ct.color
+    if session.space_id:
+        space = await db.get(Space, session.space_id)
+        if space:
+            data["space_name"] = space.name
+            # If no class_type, use space name as display name and default color
+            if not data.get("class_type_name"):
+                data["class_type_name"] = space.name
+                data["class_type_color"] = data.get("class_type_color") or "#6366f1"
     if session.instructor_id:
         instructor = await db.get(User, session.instructor_id)
         if instructor:
@@ -99,7 +109,54 @@ async def create_session(
 ):
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
-    session = ClassSession(tenant_id=current_user.tenant_id, **body.model_dump())
+
+    # Validate class_type only when provided
+    class_type = None
+    if body.class_type_id:
+        result = await db.execute(
+            select(ClassType).where(
+                ClassType.id == body.class_type_id,
+                ClassType.tenant_id == current_user.tenant_id,
+            )
+        )
+        class_type = result.scalar_one_or_none()
+        if not class_type:
+            raise HTTPException(404, "Tipo de clase no encontrado")
+
+    # Resolve capacity: use body value, then space capacity, then hard default
+    capacity = body.capacity
+    space = None
+    if body.space_id:
+        space = await db.get(Space, body.space_id)
+        if body.space_id and not space:
+            raise HTTPException(404, "Espacio no encontrado")
+        overlap = await db.execute(
+            select(ClassSession).where(
+                ClassSession.space_id == body.space_id,
+                ClassSession.tenant_id == current_user.tenant_id,
+                ClassSession.status != "cancelled",
+                ClassSession.start_datetime < body.end_datetime,
+                ClassSession.end_datetime > body.start_datetime,
+            )
+        )
+        if overlap.scalar_one_or_none():
+            raise HTTPException(409, "Este espacio ya tiene una clase programada en ese horario")
+        if capacity is None and space:
+            capacity = space.capacity
+
+    if capacity is None:
+        capacity = 8  # global fallback
+
+    session = ClassSession(
+        tenant_id=current_user.tenant_id,
+        class_type_id=body.class_type_id,
+        space_id=body.space_id,
+        instructor_id=body.instructor_id,
+        start_datetime=body.start_datetime,
+        end_datetime=body.end_datetime,
+        capacity=capacity,
+        notes=body.notes,
+    )
     db.add(session)
     await db.commit()
     await db.refresh(session)
@@ -119,16 +176,18 @@ async def quick_book(
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
 
-    # 1. Validate class_type belongs to this tenant
-    result = await db.execute(
-        select(ClassType).where(
-            ClassType.id == body.class_type_id,
-            ClassType.tenant_id == current_user.tenant_id,
+    # 1. Validate class_type only when provided
+    class_type = None
+    if body.class_type_id:
+        result = await db.execute(
+            select(ClassType).where(
+                ClassType.id == body.class_type_id,
+                ClassType.tenant_id == current_user.tenant_id,
+            )
         )
-    )
-    class_type = result.scalar_one_or_none()
-    if not class_type:
-        raise HTTPException(404, "Tipo de clase no encontrado")
+        class_type = result.scalar_one_or_none()
+        if not class_type:
+            raise HTTPException(404, "Tipo de clase no encontrado")
 
     # 2. Validate client belongs to this tenant (when provided)
     client: Client | None = None
@@ -143,19 +202,43 @@ async def quick_book(
         if not client:
             raise HTTPException(404, "Cliente no encontrado")
 
-    # 3. Capacity sanity-check: booking 1 client into a brand-new session
-    if body.client_id is not None and body.capacity < 1:
+    # 3. Resolve capacity and check space overlap
+    end_datetime = body.start_datetime + timedelta(minutes=body.duration_minutes)
+    capacity = body.capacity
+    space: Space | None = None
+    if body.space_id:
+        space = await db.get(Space, body.space_id)
+        if not space:
+            raise HTTPException(404, "Espacio no encontrado")
+        overlap = await db.execute(
+            select(ClassSession).where(
+                ClassSession.space_id == body.space_id,
+                ClassSession.tenant_id == current_user.tenant_id,
+                ClassSession.status != "cancelled",
+                ClassSession.start_datetime < end_datetime,
+                ClassSession.end_datetime > body.start_datetime,
+            )
+        )
+        if overlap.scalar_one_or_none():
+            raise HTTPException(409, "Este espacio ya tiene una clase programada en ese horario")
+        if capacity is None:
+            capacity = space.capacity
+
+    if capacity is None:
+        capacity = 8  # global fallback
+
+    # 4. Capacity sanity-check: booking 1 client into a brand-new session
+    if body.client_id is not None and capacity < 1:
         raise HTTPException(400, "La sesión no tiene capacidad disponible")
 
-    # 4. Create the session
-    end_datetime = body.start_datetime + timedelta(minutes=body.duration_minutes)
+    # 5. Create the session
     session = ClassSession(
         tenant_id=current_user.tenant_id,
         class_type_id=body.class_type_id,
         space_id=body.space_id,
         start_datetime=body.start_datetime,
         end_datetime=end_datetime,
-        capacity=body.capacity,
+        capacity=capacity,
         enrolled_count=0,
         status="scheduled",
     )
@@ -163,11 +246,9 @@ async def quick_book(
     # Flush to get session.id without committing yet
     await db.flush()
 
-    # 5. Create appointment if client_id was provided
+    # 6. Create appointment if client_id was provided
     appt: Appointment | None = None
     if body.client_id is not None:
-        # Check for duplicate (should not exist for a brand-new session, but
-        # guard against concurrent requests or future reuse of this logic)
         dup_result = await db.execute(
             select(Appointment).where(
                 Appointment.class_session_id == session.id,
@@ -187,13 +268,13 @@ async def quick_book(
         db.add(appt)
         session.enrolled_count += 1
 
-    # 6. Commit everything atomically
+    # 7. Commit everything atomically
     await db.commit()
     await db.refresh(session)
     if appt is not None:
         await db.refresh(appt)
 
-    # 7. Build enriched response
+    # 8. Build enriched response
     enriched_session = await _enrich(session, db)
 
     enriched_appt: dict | None = None
@@ -203,7 +284,7 @@ async def quick_book(
             enriched_appt["client_name"] = client.full_name
             enriched_appt["client_phone"] = client.phone
         enriched_appt["session_start"] = session.start_datetime
-        enriched_appt["class_type_name"] = class_type.name
+        enriched_appt["class_type_name"] = class_type.name if class_type else (space.name if space else None)
 
     return QuickBookResponse(session=enriched_session, appointment=enriched_appt)
 
@@ -231,8 +312,8 @@ async def update_session(
     return await _enrich(session, db)
 
 
-@router.post("/{session_id}/cancel")
-async def cancel_session(
+@router.delete("/{session_id}", status_code=200)
+async def delete_session(
     session_id: str,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -246,6 +327,11 @@ async def cancel_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
-    session.status = "cancelled"
+
+    # Delete related appointments first to avoid FK constraint violations
+    await db.execute(
+        delete(Appointment).where(Appointment.class_session_id == session.id)
+    )
+    await db.delete(session)
     await db.commit()
-    return {"message": "Sesión cancelada"}
+    return {"message": "Sesión eliminada"}

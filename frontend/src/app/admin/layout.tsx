@@ -11,6 +11,7 @@ const pageTitles: Record<string, string> = {
   '/admin/caja': 'Caja',
   '/admin/clases': 'Tipos de Clase',
   '/admin/espacios': 'Espacios',
+  '/admin/horarios': 'Configuración de Horarios',
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

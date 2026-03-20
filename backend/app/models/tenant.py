@@ -30,3 +30,5 @@ class Tenant(Base, TimestampMixin):
     class_sessions = relationship("ClassSession", back_populates="tenant", lazy="noload")
     clients = relationship("Client", back_populates="tenant", lazy="noload")
     spaces = relationship("Space", back_populates="tenant", lazy="noload")
+    studio_schedule = relationship("StudioSchedule", lazy="noload")
+    schedule_exceptions = relationship("ScheduleException", lazy="noload")

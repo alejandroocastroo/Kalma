@@ -7,12 +7,12 @@ from app.schemas.class_type import ClassTypeResponse
 
 
 class ClassSessionCreate(BaseModel):
-    class_type_id: uuid.UUID
+    class_type_id: Optional[uuid.UUID] = None
     space_id: Optional[uuid.UUID] = None
     instructor_id: Optional[uuid.UUID] = None
     start_datetime: datetime
     end_datetime: datetime
-    capacity: int
+    capacity: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -29,7 +29,7 @@ class ClassSessionUpdate(BaseModel):
 class ClassSessionResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
-    class_type_id: uuid.UUID
+    class_type_id: Optional[uuid.UUID] = None
     space_id: Optional[uuid.UUID] = None
     instructor_id: Optional[uuid.UUID] = None
     start_datetime: datetime
@@ -40,6 +40,7 @@ class ClassSessionResponse(BaseModel):
     notes: Optional[str] = None
     class_type_name: Optional[str] = None
     class_type_color: Optional[str] = None
+    space_name: Optional[str] = None
     instructor_name: Optional[str] = None
     created_at: datetime
 
@@ -47,10 +48,10 @@ class ClassSessionResponse(BaseModel):
 
 
 class QuickBookRequest(BaseModel):
-    class_type_id: uuid.UUID
+    class_type_id: Optional[uuid.UUID] = None
     start_datetime: datetime
     duration_minutes: int = 60
-    capacity: int = 8
+    capacity: Optional[int] = None
     space_id: Optional[uuid.UUID] = None
     client_id: Optional[uuid.UUID] = None
 
@@ -59,13 +60,6 @@ class QuickBookRequest(BaseModel):
     def duration_must_be_positive(cls, v: int) -> int:
         if v <= 0:
             raise ValueError("duration_minutes must be greater than 0")
-        return v
-
-    @field_validator("capacity")
-    @classmethod
-    def capacity_must_be_positive(cls, v: int) -> int:
-        if v <= 0:
-            raise ValueError("capacity must be greater than 0")
         return v
 
 

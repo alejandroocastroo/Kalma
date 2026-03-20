@@ -62,6 +62,7 @@ export interface ClassSession {
   class_type_name?: string
   class_type_color?: string
   instructor_name?: string
+  space_name?: string
   created_at: string
 }
 
@@ -207,4 +208,27 @@ export interface OccupancyReport {
   total_sessions: number
   avg_fill_rate: number
   fully_booked_count: number
+}
+
+export interface ScheduleDay {
+  id?: string
+  day_of_week: number
+  day_name: string
+  is_active: boolean
+  open_hour: number
+  close_hour: number
+}
+
+export interface ScheduleException {
+  id: string
+  date: string
+  reason?: string
+  is_closed: boolean
+  created_at: string
+}
+
+export interface GenerateSessionsResult {
+  created: number
+  skipped: number
+  dates_processed: number
 }

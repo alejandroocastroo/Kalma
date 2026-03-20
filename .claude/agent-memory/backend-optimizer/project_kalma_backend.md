@@ -18,5 +18,9 @@ Multi-tenancy: every model has `tenant_id` (UUID FK). Every query filters by `cu
 
 DB access in tests/curl: `docker exec kalma_db psql -U kalma -d kalma -c "..."`.
 
+Migrations: raw SQL files in `backend/migrations/`, run via `docker exec -i kalma_db psql -U kalma -d kalma < backend/migrations/<file>.sql`. Style: `BEGIN/COMMIT`, `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, seed in `DO $$ BEGIN ... END $$` with dynamic tenant lookup by slug. No Alembic autogenerate — migrations are hand-written SQL.
+
+Schedule module (added 2026-03-19): `studio_schedule` (weekly open/close per day, UNIQUE tenant+day_of_week) and `schedule_exceptions` (per-date closures, UNIQUE tenant+date). Router at `/api/v1/schedule`. Generate endpoint bulk-loads existing sessions into a Python set before the loop to avoid N+1 DB hits; also tracks newly added sessions in the same set to prevent intra-batch double-booking without needing a flush per slot.
+
 **Why:** Document for future sessions so conventions are followed without re-reading every file.
 **How to apply:** Follow these patterns on every new endpoint — commit pattern, enrichment pattern, route ordering, tenant filtering.

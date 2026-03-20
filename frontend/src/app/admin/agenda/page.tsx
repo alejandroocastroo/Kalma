@@ -1,13 +1,13 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classSessions, classTypes, appointments, spaces, clients } from '@/lib/api'
+import { classSessions, appointments, spaces, clients } from '@/lib/api'
 import { SessionCard } from '@/components/admin/session-card'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime, formatCOP, appointmentStatusConfig } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, X, Users, Check } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus } from 'lucide-react'
 import { format, addWeeks, subWeeks, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -61,16 +61,15 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const [duration, setDuration] = useState(60)
 
   // Shared state
-  const [classTypeId, setClassTypeId] = useState('')
-  const [capacity, setCapacity] = useState('8')
+  const [spaceId, setSpaceId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<ClientType | null>(null)
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  const { data: types = [] } = useQuery({
-    queryKey: ['class-types'],
-    queryFn: classTypes.list,
+  const { data: spaceList = [] } = useQuery({
+    queryKey: ['spaces'],
+    queryFn: spaces.list,
   })
 
   const { data: clientsData } = useQuery({
@@ -91,8 +90,8 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   }, [allClients, clientSearch])
 
   const handleSubmit = async () => {
-    if (!classTypeId) {
-      toast.error('Selecciona un tipo de clase')
+    if (!spaceId) {
+      toast.error('Selecciona un espacio')
       return
     }
 
@@ -113,10 +112,9 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
       }
 
       const session = await classSessions.create({
-        class_type_id: classTypeId,
+        space_id: spaceId,
         start_datetime: startISO,
         end_datetime: endISO,
-        capacity: parseInt(capacity, 10),
       })
 
       if (selectedClient) {
@@ -233,37 +231,23 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
         </div>
       )}
 
-      {/* Class type */}
+      {/* Space selector — required */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Tipo de clase
+          Espacio *
         </label>
         <select
-          value={classTypeId}
-          onChange={(e) => setClassTypeId(e.target.value)}
+          value={spaceId}
+          onChange={(e) => setSpaceId(e.target.value)}
           className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
         >
-          <option value="">Selecciona...</option>
-          {types.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
+          <option value="">Selecciona un espacio...</option>
+          {spaceList.map((sp) => (
+            <option key={sp.id} value={sp.id}>
+              {sp.name} — capacidad {sp.capacity}
             </option>
           ))}
         </select>
-      </div>
-
-      {/* Capacity */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Capacidad
-        </label>
-        <input
-          type="number"
-          min="1"
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
-        />
       </div>
 
       {/* Client search — optional, books on creation */}
@@ -346,25 +330,24 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
 
 // ─── CreateSessionForm (improved UX) ─────────────────────────────────────────
 function CreateSessionForm({ onClose }: { onClose: () => void }) {
-  const { data: types = [] } = useQuery({
-    queryKey: ['class-types'],
-    queryFn: classTypes.list,
+  const { data: spaceList = [] } = useQuery({
+    queryKey: ['spaces'],
+    queryFn: spaces.list,
   })
 
   const today = format(new Date(), 'yyyy-MM-dd')
-  const [classTypeId, setClassTypeId] = useState('')
+  const [spaceId, setSpaceId] = useState('')
   const [date, setDate] = useState(today)
   const [selectedHour, setSelectedHour] = useState<number | null>(null)
   // Duration mode: 'fixed' = 60 min, 'custom' = choose
   const [durationMode, setDurationMode] = useState<'fixed' | 'custom'>('fixed')
   const [customDuration, setCustomDuration] = useState(60)
-  const [capacity, setCapacity] = useState('8')
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!classTypeId) {
-      toast.error('Selecciona un tipo de clase')
+    if (!spaceId) {
+      toast.error('Selecciona un espacio')
       return
     }
     if (selectedHour === null) {
@@ -383,10 +366,9 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
       const end = new Date(start.getTime() + durationMin * 60000)
 
       await classSessions.create({
-        class_type_id: classTypeId,
+        space_id: spaceId,
         start_datetime: start.toISOString(),
         end_datetime: end.toISOString(),
-        capacity: parseInt(capacity, 10),
       })
       toast.success('Sesión creada')
       onClose()
@@ -399,20 +381,20 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Class type */}
+      {/* Space selector — required */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
-          Tipo de clase
+          Espacio *
         </label>
         <select
           className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
-          value={classTypeId}
-          onChange={(e) => setClassTypeId(e.target.value)}
+          value={spaceId}
+          onChange={(e) => setSpaceId(e.target.value)}
         >
-          <option value="">Selecciona...</option>
-          {types.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name}
+          <option value="">Selecciona un espacio...</option>
+          {spaceList.map((sp) => (
+            <option key={sp.id} value={sp.id}>
+              {sp.name} — capacidad {sp.capacity}
             </option>
           ))}
         </select>
@@ -504,20 +486,6 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      {/* Capacity */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Capacidad
-        </label>
-        <input
-          type="number"
-          min="1"
-          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-        />
-      </div>
-
       <div className="flex gap-2 pt-1">
         <Button type="submit" disabled={loading}>
           {loading ? 'Creando...' : 'Crear sesión'}
@@ -595,13 +563,77 @@ export default function AgendaPage() {
   })
 
   const cancelMutation = useMutation({
-    mutationFn: (id: string) => classSessions.cancel(id),
+    mutationFn: (id: string) => classSessions.delete(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['week-sessions'] })
       setSelectedSession(null)
-      toast.success('Sesión cancelada')
+      toast.success('Sesión eliminada')
     },
   })
+
+  // ── Remove client from session ────────────────────────────────────────────
+  const [removingApptId, setRemovingApptId] = useState<string | null>(null)
+
+  const removeClientMutation = useMutation({
+    mutationFn: (apptId: string) => appointments.remove(apptId),
+    onMutate: (apptId) => setRemovingApptId(apptId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['appointments', selectedSession?.id] })
+      qc.invalidateQueries({ queryKey: ['week-sessions'] })
+      toast.success('Cliente eliminado de la sesión')
+    },
+    onError: () => toast.error('Error al eliminar cliente'),
+    onSettled: () => setRemovingApptId(null),
+  })
+
+  // ── Add client to session ─────────────────────────────────────────────────
+  const [showAddClient, setShowAddClient] = useState(false)
+  const [addClientSearch, setAddClientSearch] = useState('')
+  const [addClientDropdownOpen, setAddClientDropdownOpen] = useState(false)
+  const [isAddingClient, setIsAddingClient] = useState(false)
+
+  const { data: clientsData } = useQuery({
+    queryKey: ['clients-all'],
+    queryFn: () => clients.list({ limit: 100 }),
+  })
+  const allClients = clientsData?.items ?? []
+
+  const filteredAddClients = useMemo(() => {
+    if (!addClientSearch.trim()) return allClients.slice(0, 8)
+    const q = addClientSearch.toLowerCase()
+    return allClients.filter(
+      (c) =>
+        c.full_name.toLowerCase().includes(q) ||
+        c.phone?.includes(q) ||
+        c.email?.toLowerCase().includes(q)
+    )
+  }, [allClients, addClientSearch])
+
+  const handleAddClient = async (client: ClientType) => {
+    if (!selectedSession) return
+    if (selectedSession.enrolled_count >= selectedSession.capacity) {
+      toast.error('La sesión está llena')
+      return
+    }
+    setIsAddingClient(true)
+    try {
+      await appointments.create({
+        class_session_id: selectedSession.id,
+        client_id: client.id,
+        status: 'confirmed',
+        paid: false,
+      })
+      qc.invalidateQueries({ queryKey: ['appointments', selectedSession.id] })
+      qc.invalidateQueries({ queryKey: ['week-sessions'] })
+      toast.success('Cliente agendado')
+      setShowAddClient(false)
+      setAddClientSearch('')
+    } catch {
+      toast.error('Error al agendar cliente')
+    } finally {
+      setIsAddingClient(false)
+    }
+  }
 
   const getSessionsForDay = (day: Date) =>
     filteredSessions.filter((s) => isSameDay(parseISO(s.start_datetime), day))
@@ -745,11 +777,18 @@ export default function AgendaPage() {
       {/* Session detail modal */}
       <Dialog
         open={!!selectedSession}
-        onOpenChange={(open) => !open && setSelectedSession(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedSession(null)
+            setShowAddClient(false)
+            setAddClientSearch('')
+          }
+        }}
       >
         <DialogContent title={selectedSession?.class_type_name || 'Sesión'}>
           {selectedSession && (
             <div className="space-y-4">
+              {/* Info grid */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
                   <p className="text-gray-500">Inicio</p>
@@ -765,9 +804,22 @@ export default function AgendaPage() {
                 </div>
                 <div>
                   <p className="text-gray-500">Capacidad</p>
-                  <p className="font-medium">
-                    {selectedSession.enrolled_count}/{selectedSession.capacity}
-                  </p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="font-medium">
+                      {selectedSession.enrolled_count}/{selectedSession.capacity}
+                    </p>
+                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full min-w-16">
+                      <div
+                        className="h-full rounded-full bg-primary-500 transition-all"
+                        style={{
+                          width: `${Math.min(
+                            100,
+                            (selectedSession.enrolled_count / selectedSession.capacity) * 100
+                          )}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
                 </div>
                 <div>
                   <p className="text-gray-500">Estado</p>
@@ -778,6 +830,12 @@ export default function AgendaPage() {
                   >
                     {selectedSession.status}
                   </Badge>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-gray-500">Espacio</p>
+                  <p className="font-medium">
+                    {(selectedSession as any).space_name || 'Sin espacio asignado'}
+                  </p>
                 </div>
               </div>
 
@@ -795,6 +853,7 @@ export default function AgendaPage() {
                   <div className="space-y-2">
                     {sessionAppointments.map((appt: any) => {
                       const cfg = appointmentStatusConfig[appt.status]
+                      const isRemoving = removingApptId === appt.id
                       return (
                         <div
                           key={appt.id}
@@ -811,10 +870,89 @@ export default function AgendaPage() {
                             >
                               {cfg?.label}
                             </span>
+                            {appt.status !== 'cancelled' && (
+                              <button
+                                onClick={() => removeClientMutation.mutate(appt.id)}
+                                disabled={isRemoving}
+                                title="Quitar cliente"
+                                className="ml-1 text-gray-300 hover:text-red-500 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                              >
+                                <UserX className="w-4 h-4" />
+                              </button>
+                            )}
                           </div>
                         </div>
                       )
                     })}
+                  </div>
+                )}
+
+                {/* Add client section */}
+                {selectedSession.status !== 'cancelled' && (
+                  <div className="mt-3">
+                    {!showAddClient ? (
+                      <button
+                        onClick={() => setShowAddClient(true)}
+                        className="flex items-center gap-1 text-sm text-primary-600 hover:underline"
+                      >
+                        <UserPlus className="w-4 h-4" />
+                        Agregar cliente
+                      </button>
+                    ) : (
+                      <div className="mt-2 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-gray-700">Agregar cliente</p>
+                          <button
+                            onClick={() => {
+                              setShowAddClient(false)
+                              setAddClientSearch('')
+                            }}
+                            className="text-gray-400 hover:text-gray-600 transition"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="relative">
+                          <input
+                            type="text"
+                            placeholder="Buscar cliente..."
+                            value={addClientSearch}
+                            onChange={(e) => {
+                              setAddClientSearch(e.target.value)
+                              setAddClientDropdownOpen(true)
+                            }}
+                            onFocus={() => setAddClientDropdownOpen(true)}
+                            onBlur={() =>
+                              setTimeout(() => setAddClientDropdownOpen(false), 150)
+                            }
+                            disabled={isAddingClient}
+                            className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm disabled:opacity-50"
+                          />
+                          {addClientDropdownOpen && filteredAddClients.length > 0 && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                              {filteredAddClients.map((c) => (
+                                <button
+                                  key={c.id}
+                                  onMouseDown={() => handleAddClient(c)}
+                                  disabled={isAddingClient}
+                                  className="w-full text-left px-3 py-2 hover:bg-gray-50 transition disabled:opacity-50"
+                                >
+                                  <p className="text-sm font-medium text-gray-900">
+                                    {c.full_name}
+                                  </p>
+                                  {c.phone && (
+                                    <p className="text-xs text-gray-500">{c.phone}</p>
+                                  )}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {isAddingClient && (
+                          <p className="text-xs text-gray-400">Agendando...</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -824,9 +962,8 @@ export default function AgendaPage() {
                   variant="destructive"
                   size="sm"
                   onClick={() => cancelMutation.mutate(selectedSession.id)}
-                  disabled={selectedSession.status === 'cancelled'}
                 >
-                  Cancelar sesión
+                  Eliminar sesión
                 </Button>
                 <DialogClose asChild>
                   <Button variant="outline" size="sm">

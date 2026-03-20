@@ -101,6 +101,8 @@ export const classSessions = {
     apiClient.put<ClassSession>(`/class-sessions/${id}`, data).then((r) => r.data),
   cancel: (id: string) =>
     apiClient.post(`/class-sessions/${id}/cancel`).then((r) => r.data),
+  delete: (id: string) =>
+    apiClient.delete(`/class-sessions/${id}`).then((r) => r.data),
 }
 
 // ── Clients ───────────────────────────────────────────────────
@@ -128,6 +130,8 @@ export const appointments = {
     apiClient.post(`/appointments/${id}/attend`).then((r) => r.data),
   cancel: (id: string) =>
     apiClient.post(`/appointments/${id}/cancel`).then((r) => r.data),
+  remove: (id: string) =>
+    apiClient.delete(`/appointments/${id}`).then((r) => r.data),
   confirmWhatsapp: (id: string) =>
     apiClient.post(`/appointments/${id}/confirm-whatsapp`).then((r) => r.data),
 }
@@ -163,6 +167,28 @@ export const reports = {
     apiClient.get<RevenueReport[]>('/reports/revenue', { params }).then((r) => r.data),
   occupancy: (params?: { space_id?: string; from?: string; to?: string }) =>
     apiClient.get<OccupancyReport[]>('/reports/occupancy', { params }).then((r) => r.data),
+}
+
+// ── Schedule ──────────────────────────────────────────────────
+export const schedule = {
+  get: () => apiClient.get('/schedule').then((r) => r.data),
+  updateDay: (
+    dayOfWeek: number,
+    data: { is_active: boolean; open_hour: number; close_hour: number }
+  ) => apiClient.put(`/schedule/${dayOfWeek}`, data).then((r) => r.data),
+  exceptions: (params?: { from?: string; to?: string }) =>
+    apiClient.get('/schedule/exceptions', { params }).then((r) => r.data),
+  addException: (data: { date: string; reason?: string; is_closed: boolean }) =>
+    apiClient.post('/schedule/exceptions', data).then((r) => r.data),
+  removeException: (id: string) =>
+    apiClient.delete(`/schedule/exceptions/${id}`).then((r) => r.data),
+  generate: (data: {
+    from_date: string
+    to_date: string
+    class_type_id?: string
+    space_id: string
+    skip_existing: boolean
+  }) => apiClient.post('/schedule/generate', data).then((r) => r.data),
 }
 
 // ── Public (no auth) ──────────────────────────────────────────
