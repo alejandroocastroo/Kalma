@@ -88,6 +88,26 @@ export const appointmentStatusConfig: Record<string, { label: string; className:
 }
 
 export const categoryLabels: Record<string, string> = {
+  // Ingresos
+  clase_grupal: 'Clase grupal',
+  clase_privada: 'Clase privada',
+  paquete_sesiones: 'Paquete de sesiones',
+  membresia: 'Membresía',
+  inscripcion: 'Inscripción / matrícula',
+  otro_ingreso: 'Otro ingreso',
+  // Egresos
+  arriendo: 'Arriendo',
+  servicios_publicos: 'Servicios públicos',
+  nomina_instructores: 'Nómina instructores',
+  nomina_admin: 'Nómina administrativa',
+  mantenimiento: 'Mantenimiento',
+  equipamiento: 'Equipamiento',
+  marketing: 'Marketing y publicidad',
+  contabilidad: 'Contabilidad',
+  tecnologia: 'Software / tecnología',
+  seguros: 'Seguros',
+  otros_gastos: 'Otros gastos',
+  // Legado
   class_fee: 'Cobro de clase',
   membership: 'Membresía',
   package: 'Paquete',

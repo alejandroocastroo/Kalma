@@ -8,6 +8,7 @@ from pydantic import BaseModel
 class PaymentCreate(BaseModel):
     client_id: Optional[uuid.UUID] = None
     appointment_id: Optional[uuid.UUID] = None
+    space_id: Optional[uuid.UUID] = None
     amount: Decimal
     type: str  # income, expense
     category: str
@@ -23,6 +24,7 @@ class PaymentUpdate(BaseModel):
     payment_method: Optional[str] = None
     description: Optional[str] = None
     payment_date: Optional[date] = None
+    space_id: Optional[uuid.UUID] = None
 
 
 class PaymentResponse(BaseModel):
@@ -30,6 +32,7 @@ class PaymentResponse(BaseModel):
     tenant_id: uuid.UUID
     client_id: Optional[uuid.UUID] = None
     appointment_id: Optional[uuid.UUID] = None
+    space_id: Optional[uuid.UUID] = None
     amount: Decimal
     type: str
     category: str
@@ -37,9 +40,16 @@ class PaymentResponse(BaseModel):
     description: Optional[str] = None
     payment_date: date
     client_name: Optional[str] = None
+    space_name: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class SpaceFlowBreakdown(BaseModel):
+    income: Decimal = Decimal("0")
+    expenses: Decimal = Decimal("0")
+    net: Decimal = Decimal("0")
 
 
 class CashFlowSummary(BaseModel):
@@ -48,5 +58,6 @@ class CashFlowSummary(BaseModel):
     net: Decimal
     by_category: Dict[str, Decimal]
     by_method: Dict[str, Decimal]
+    by_space: Dict[str, SpaceFlowBreakdown] = {}
     income_count: int
     expense_count: int

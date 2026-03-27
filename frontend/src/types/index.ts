@@ -105,21 +105,28 @@ export interface Appointment {
 }
 
 export type PaymentType = 'income' | 'expense'
-export type PaymentCategory = 'class_fee' | 'membership' | 'package' | 'equipment' | 'rent' | 'salary' | 'other'
 
 export interface Payment {
   id: string
   tenant_id: string
   client_id?: string
   appointment_id?: string
+  space_id?: string
+  space_name?: string
   amount: number
   type: PaymentType
-  category: PaymentCategory
+  category: string
   payment_method: string
   description?: string
   payment_date: string
   client_name?: string
   created_at: string
+}
+
+export interface SpaceSummary {
+  income: number
+  expenses: number
+  net: number
 }
 
 export interface CashFlowSummary {
@@ -128,6 +135,7 @@ export interface CashFlowSummary {
   net: number
   by_category: Record<string, number>
   by_method: Record<string, number>
+  by_space: Record<string, SpaceSummary>
   income_count: number
   expense_count: number
 }

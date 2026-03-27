@@ -9,7 +9,9 @@
       "Bash(__NEW_LINE_297b50eaccfbfb89__ echo:*)",
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MGZiMDJlYy1lN2Q4LTQ0YmUtOTI5Mi03Yzc3NDAwZjg5YmYiLCJleHAiOjE3NzM5ODY0NzgsInR5cGUiOiJhY2Nlc3MifQ.-tDCKWaNZLFHiUZqn9DOq-8VKTJfnWvqkqcLCHZXGn4\" __NEW_LINE_a7229986500ec453__ echo \"=== POST /spaces \\(create\\) ===\")",
       "Bash(ls:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Skill(update-config)",
+      "Bash(docker restart:*)"
     ],
     "deny": [
       "Bash(git commit*)",

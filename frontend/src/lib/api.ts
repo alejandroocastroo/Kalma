@@ -138,14 +138,14 @@ export const appointments = {
 
 // ── Payments ──────────────────────────────────────────────────
 export const payments = {
-  list: (params?: { start?: string; end?: string; type?: string }) =>
+  list: (params?: { start?: string; end?: string; type?: string; space_id?: string }) =>
     apiClient.get<Payment[]>('/payments', { params }).then((r) => r.data),
   create: (data: Partial<Payment>) =>
     apiClient.post<Payment>('/payments', data).then((r) => r.data),
   update: (id: string, data: Partial<Payment>) =>
     apiClient.put<Payment>(`/payments/${id}`, data).then((r) => r.data),
   delete: (id: string) => apiClient.delete(`/payments/${id}`).then((r) => r.data),
-  summary: (params?: { start?: string; end?: string }) =>
+  summary: (params?: { start?: string; end?: string; space_id?: string }) =>
     apiClient.get<CashFlowSummary>('/payments/summary', { params }).then((r) => r.data),
 }
 
