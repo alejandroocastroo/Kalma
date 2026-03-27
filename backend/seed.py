@@ -18,6 +18,9 @@ from app.models.class_session import ClassSession
 from app.models.client import Client
 from app.models.appointment import Appointment
 from app.models.payment import Payment
+from app.models.space import Space
+from app.models.studio_schedule import StudioSchedule
+from app.models.schedule_exception import ScheduleException
 
 
 BOGOTA = pytz.timezone("America/Bogota")
