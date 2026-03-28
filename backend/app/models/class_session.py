@@ -20,6 +20,7 @@ class ClassSession(Base, TimestampMixin):
     capacity: Mapped[int] = mapped_column(Integer, nullable=False)
     enrolled_count: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="scheduled")  # scheduled, in_progress, completed, cancelled
+    custom_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     tenant = relationship("Tenant", back_populates="class_sessions", lazy="noload")

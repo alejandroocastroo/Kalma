@@ -13,6 +13,7 @@ class ClassSessionCreate(BaseModel):
     start_datetime: datetime
     end_datetime: datetime
     capacity: Optional[int] = None
+    custom_name: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -23,6 +24,7 @@ class ClassSessionUpdate(BaseModel):
     end_datetime: Optional[datetime] = None
     capacity: Optional[int] = None
     status: Optional[str] = None
+    custom_name: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -37,6 +39,7 @@ class ClassSessionResponse(BaseModel):
     capacity: int
     enrolled_count: int
     status: str
+    custom_name: Optional[str] = None
     notes: Optional[str] = None
     class_type_name: Optional[str] = None
     class_type_color: Optional[str] = None

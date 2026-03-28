@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime, formatCOP, appointmentStatusConfig } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus, Pencil } from 'lucide-react'
 import { format, addWeeks, subWeeks, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -61,6 +61,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const [duration, setDuration] = useState(60)
 
   // Shared state
+  const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<ClientType | null>(null)
@@ -115,6 +116,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
         space_id: spaceId,
         start_datetime: startISO,
         end_datetime: endISO,
+        ...(customName.trim() && { custom_name: customName.trim() }),
       })
 
       if (selectedClient) {
@@ -231,6 +233,20 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
         </div>
       )}
 
+      {/* Custom name — optional */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Nombre de la clase (opcional)
+        </label>
+        <input
+          type="text"
+          placeholder="Ej: Estiramiento, Fortalecimiento..."
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+        />
+      </div>
+
       {/* Space selector — required */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -336,6 +352,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
   })
 
   const today = format(new Date(), 'yyyy-MM-dd')
+  const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
   const [date, setDate] = useState(today)
   const [selectedHour, setSelectedHour] = useState<number | null>(null)
@@ -369,6 +386,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
         space_id: spaceId,
         start_datetime: start.toISOString(),
         end_datetime: end.toISOString(),
+        ...(customName.trim() && { custom_name: customName.trim() }),
       })
       toast.success('Sesión creada')
       onClose()
@@ -381,6 +399,20 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
+      {/* Custom name — optional */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Nombre de la clase (opcional)
+        </label>
+        <input
+          type="text"
+          placeholder="Ej: Estiramiento, Fortalecimiento..."
+          value={customName}
+          onChange={(e) => setCustomName(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+        />
+      </div>
+
       {/* Space selector — required */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -569,6 +601,22 @@ export default function AgendaPage() {
       setSelectedSession(null)
       toast.success('Sesión eliminada')
     },
+  })
+
+  // ── Edit session name ─────────────────────────────────────────────────────
+  const [editingName, setEditingName] = useState(false)
+  const [editNameValue, setEditNameValue] = useState('')
+
+  const updateNameMutation = useMutation({
+    mutationFn: ({ id, custom_name }: { id: string; custom_name: string | null }) =>
+      classSessions.update(id, { custom_name: custom_name ?? undefined }),
+    onSuccess: (updated) => {
+      setSelectedSession((prev) => prev ? { ...prev, custom_name: updated.custom_name } : prev)
+      qc.invalidateQueries({ queryKey: ['week-sessions'] })
+      setEditingName(false)
+      toast.success('Nombre actualizado')
+    },
+    onError: () => toast.error('Error al actualizar el nombre'),
   })
 
   // ── Remove client from session ────────────────────────────────────────────
@@ -782,14 +830,66 @@ export default function AgendaPage() {
             setSelectedSession(null)
             setShowAddClient(false)
             setAddClientSearch('')
+            setEditingName(false)
+            setEditNameValue('')
           }
         }}
       >
-        <DialogContent title={selectedSession?.class_type_name || 'Sesión'}>
+        <DialogContent title={selectedSession?.custom_name || selectedSession?.class_type_name || 'Sesión'}>
           {selectedSession && (
             <div className="space-y-4">
               {/* Info grid */}
               <div className="grid grid-cols-2 gap-3 text-sm">
+                {/* Editable custom name */}
+                <div className="col-span-2">
+                  <p className="text-gray-500 mb-1">Nombre personalizado</p>
+                  {editingName ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={editNameValue}
+                        onChange={(e) => setEditNameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') updateNameMutation.mutate({ id: selectedSession.id, custom_name: editNameValue.trim() || null })
+                          if (e.key === 'Escape') setEditingName(false)
+                        }}
+                        placeholder="Ej: Estiramiento, Fortalecimiento..."
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                      <button
+                        onClick={() => updateNameMutation.mutate({ id: selectedSession.id, custom_name: editNameValue.trim() || null })}
+                        disabled={updateNameMutation.isPending}
+                        className="p-1.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setEditingName(false)}
+                        className="p-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 group">
+                      <p className="font-medium">
+                        {selectedSession.custom_name || (
+                          <span className="text-gray-400 italic">Sin nombre personalizado</span>
+                        )}
+                      </p>
+                      <button
+                        onClick={() => {
+                          setEditNameValue(selectedSession.custom_name || '')
+                          setEditingName(true)
+                        }}
+                        className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-opacity"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div>
                   <p className="text-gray-500">Inicio</p>
                   <p className="font-medium">

@@ -58,6 +58,7 @@ export interface ClassSession {
   capacity: number
   enrolled_count: number
   status: ClassSessionStatus
+  custom_name?: string
   notes?: string
   class_type_name?: string
   class_type_color?: string

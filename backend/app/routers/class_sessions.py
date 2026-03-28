@@ -37,7 +37,6 @@ async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
         space = await db.get(Space, session.space_id)
         if space:
             data["space_name"] = space.name
-            # If no class_type, use space name as display name and default color
             if not data.get("class_type_name"):
                 data["class_type_name"] = space.name
                 data["class_type_color"] = data.get("class_type_color") or "#6366f1"
@@ -45,6 +44,9 @@ async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
         instructor = await db.get(User, session.instructor_id)
         if instructor:
             data["instructor_name"] = instructor.full_name
+    # custom_name overrides the display name if set
+    if session.custom_name:
+        data["class_type_name"] = session.custom_name
     return data
 
 
@@ -155,6 +157,7 @@ async def create_session(
         start_datetime=body.start_datetime,
         end_datetime=body.end_datetime,
         capacity=capacity,
+        custom_name=body.custom_name,
         notes=body.notes,
     )
     db.add(session)
