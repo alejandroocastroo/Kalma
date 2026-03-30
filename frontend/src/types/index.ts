@@ -241,3 +241,45 @@ export interface GenerateSessionsResult {
   skipped: number
   dates_processed: number
 }
+
+export interface Plan {
+  id: string
+  tenant_id: string
+  name: string
+  description?: string
+  price_cop: number
+  classes_per_week: number
+  is_active: boolean
+  created_at: string
+}
+
+export interface ClientMembership {
+  id: string
+  tenant_id: string
+  client_id: string
+  plan_id: string
+  start_date: string
+  end_date?: string
+  status: 'active' | 'paused' | 'cancelled'
+  makeup_credits: number
+  notes?: string
+  created_at: string
+  client_name?: string
+  plan_name?: string
+  plan_classes_per_week?: number
+  plan_price_cop?: number
+}
+
+export interface WeeklyStats {
+  membership_id: string
+  client_id: string
+  client_name: string
+  plan_name: string
+  classes_per_week: number
+  makeup_credits: number
+  used_this_week: number
+  pending_this_week: number
+  total_committed_week: number
+  week_start: string
+  week_end: string
+}

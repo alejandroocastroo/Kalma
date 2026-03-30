@@ -10,6 +10,8 @@ const pageTitles: Record<string, string> = {
   '/admin/clientes': 'Clientes',
   '/admin/caja': 'Caja',
   '/admin/clases': 'Tipos de Clase',
+  '/admin/planes': 'Planes de Membresía',
+  '/admin/membresias': 'Membresías',
   '/admin/espacios': 'Espacios',
   '/admin/horarios': 'Configuración de Horarios',
 }

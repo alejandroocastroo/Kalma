@@ -5,5 +5,7 @@ from app.models.class_session import ClassSession
 from app.models.client import Client
 from app.models.appointment import Appointment
 from app.models.payment import Payment
+from app.models.plan import Plan
+from app.models.client_membership import ClientMembership
 
-__all__ = ["Tenant", "User", "ClassType", "ClassSession", "Client", "Appointment", "Payment"]
+__all__ = ["Tenant", "User", "ClassType", "ClassSession", "Client", "Appointment", "Payment", "Plan", "ClientMembership"]
