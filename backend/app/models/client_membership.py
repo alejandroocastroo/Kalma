@@ -1,6 +1,6 @@
 import uuid
 from datetime import date
-from sqlalchemy import String, Text, Integer, Date, ForeignKey
+from sqlalchemy import String, Text, Integer, Date, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -19,6 +19,10 @@ class ClientMembership(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="active")
     makeup_credits: Mapped[int] = mapped_column(Integer, default=0)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    preferred_days: Mapped[list | None] = mapped_column(JSON, nullable=True)  # e.g. [0,2,4] lunes=0...domingo=6
+    preferred_hour: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 0-23
+    preferred_space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True)
 
     client = relationship("Client", lazy="noload")
     plan = relationship("Plan", back_populates="memberships", lazy="noload")
+    preferred_space = relationship("Space", foreign_keys=[preferred_space_id], lazy="noload")

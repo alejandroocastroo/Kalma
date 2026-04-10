@@ -10,6 +10,9 @@ class ClientMembershipCreate(BaseModel):
     start_date: date
     end_date: Optional[date] = None
     notes: Optional[str] = None
+    preferred_days: Optional[list[int]] = None   # [0,2,4] → lun, mié, vie
+    preferred_hour: Optional[int] = None          # 15 → 3pm
+    preferred_space_id: Optional[uuid.UUID] = None
 
 
 class ClientMembershipUpdate(BaseModel):
@@ -18,6 +21,9 @@ class ClientMembershipUpdate(BaseModel):
     end_date: Optional[date] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    preferred_days: Optional[list[int]] = None
+    preferred_hour: Optional[int] = None
+    preferred_space_id: Optional[uuid.UUID] = None
 
 
 class ClientMembershipResponse(BaseModel):
@@ -30,11 +36,15 @@ class ClientMembershipResponse(BaseModel):
     status: str
     makeup_credits: int
     notes: Optional[str] = None
+    preferred_days: Optional[list[int]] = None
+    preferred_hour: Optional[int] = None
+    preferred_space_id: Optional[uuid.UUID] = None
     created_at: datetime
     client_name: Optional[str] = None
     plan_name: Optional[str] = None
     plan_classes_per_week: Optional[int] = None
     plan_price_cop: Optional[int] = None
+    preferred_space_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -51,7 +61,19 @@ class WeeklyStatsResponse(BaseModel):
     total_committed_week: int
     week_start: date
     week_end: date
+    classes_per_month: int        # classes_per_week * 4
+    used_this_month: int          # appointments attended este mes
+    pending_this_month: int       # appointments confirmed futuros este mes
+    total_committed_month: int    # used_this_month + pending_this_month
+    month_start: date
+    month_end: date
 
 
 class AddMakeupBody(BaseModel):
     credits: int
+
+
+class AutoBookResponse(BaseModel):
+    booked: int          # sesiones agendadas exitosamente
+    skipped: int         # ya tenía cita o sin capacidad
+    sessions: list[str]  # fechas de sesiones agendadas (ISO strings)

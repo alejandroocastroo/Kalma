@@ -3,8 +3,8 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, RotateCcw, Pencil, RefreshCw, Calendar } from 'lucide-react'
-import { plans as plansApi, memberships, clients as clientsApi } from '@/lib/api'
-import type { ClientMembership, Plan, Client, WeeklyStats } from '@/types'
+import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi } from '@/lib/api'
+import type { ClientMembership, Plan, Client, WeeklyStats, AutoBookResult } from '@/types'
 import { formatCOP } from '@/lib/utils'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -16,23 +16,37 @@ import { Input } from '@/components/ui/input'
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'cancelled'
 
-function WeeklyUsageBar({ membershipId }: { membershipId: string }) {
+function MonthlyUsageBar({ membershipId }: { membershipId: string }) {
   const { data: stats } = useQuery<WeeklyStats>({
     queryKey: ['weekly-stats', membershipId],
     queryFn: () => memberships.weeklyStats(membershipId),
     staleTime: 5 * 60 * 1000,
   })
-  if (!stats) return <div className="h-1.5 w-20 bg-gray-100 rounded-full animate-pulse" />
-  const pct = Math.min(100, (stats.total_committed_week / stats.classes_per_week) * 100)
-  const color = pct >= 100 ? 'bg-red-400' : pct >= 66 ? 'bg-amber-400' : 'bg-green-400'
+  if (!stats) return <div className="h-4 w-full bg-gray-100 rounded-full animate-pulse" />
+
+  const total = stats.classes_per_month + stats.makeup_credits
+  const committed = stats.total_committed_month
+  const pct = total > 0 ? Math.min(100, (committed / total) * 100) : 0
+  const barColor = pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-green-400'
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-gray-500">Clases este mes</span>
+        <span className={`font-semibold ${pct >= 100 ? 'text-red-600' : pct >= 75 ? 'text-amber-600' : 'text-gray-700'}`}>
+          {committed} <span className="font-normal text-gray-400">/ {total}</span>
+          {stats.makeup_credits > 0 && (
+            <span className="ml-1 text-amber-500">(+{stats.makeup_credits} repos.)</span>
+          )}
+        </span>
       </div>
-      <span className="text-xs text-gray-500">
-        {stats.total_committed_week}/{stats.classes_per_week} esta sem.
-      </span>
+      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+      </div>
+      <div className="flex items-center justify-between text-xs text-gray-400">
+        <span>{stats.used_this_month} asistidas · {stats.pending_this_month} reservadas</span>
+        <span>{stats.classes_per_week} cls/sem × 4</span>
+      </div>
     </div>
   )
 }
@@ -77,6 +91,9 @@ export default function MembresiasPage() {
     start_date: '',
     end_date: '',
     notes: '',
+    preferred_days: [] as number[],
+    preferred_hour: '' as string | '',
+    preferred_space_id: '',
   })
   // Client search autocomplete
   const [clientSearch, setClientSearch] = useState('')
@@ -97,6 +114,11 @@ export default function MembresiasPage() {
   const { data: plansData } = useQuery<Plan[]>({
     queryKey: ['plans'],
     queryFn: plansApi.list,
+  })
+
+  const { data: spacesList = [] } = useQuery({
+    queryKey: ['spaces'],
+    queryFn: spacesApi.list,
   })
 
   const { data: clientSearchResults = [] } = useQuery<Client[]>({
@@ -120,13 +142,30 @@ export default function MembresiasPage() {
     onError: () => toast.error('Error al sincronizar'),
   })
 
+  const autoBookMutation = useMutation({
+    mutationFn: (id: string) => memberships.autoBook(id),
+    onSuccess: (data: AutoBookResult) => {
+      qc.invalidateQueries({ queryKey: ['weekly-stats'] })
+      qc.invalidateQueries({ queryKey: ['memberships'] })
+      if (data.booked > 0) {
+        toast.success(`✓ ${data.booked} clases agendadas automáticamente en el calendario`)
+      } else {
+        toast.success('Horario guardado. No hay sesiones creadas aún para esos días/hora este mes.')
+      }
+    },
+    onError: () => {},
+  })
+
   const createMutation = useMutation({
-    mutationFn: (data: { client_id: string; plan_id: string; start_date: string; end_date?: string; notes?: string }) =>
+    mutationFn: (data: { client_id: string; plan_id: string; start_date: string; end_date?: string; notes?: string; preferred_days?: number[]; preferred_hour?: number; preferred_space_id?: string }) =>
       memberships.create(data),
-    onSuccess: () => {
+    onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ['memberships'] })
       toast.success('Membresía creada')
       setDialogOpen(false)
+      if (form.preferred_days.length > 0 && form.preferred_hour !== '') {
+        autoBookMutation.mutate(created.id)
+      }
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al crear membresía'),
   })
@@ -134,10 +173,13 @@ export default function MembresiasPage() {
   const updateMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: Partial<ClientMembership> }) =>
       memberships.update(id, data),
-    onSuccess: () => {
+    onSuccess: (updated) => {
       qc.invalidateQueries({ queryKey: ['memberships'] })
       toast.success('Membresía actualizada')
       setDialogOpen(false)
+      if (form.preferred_days.length > 0 && form.preferred_hour !== '') {
+        autoBookMutation.mutate(updated.id)
+      }
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al actualizar'),
   })
@@ -155,7 +197,7 @@ export default function MembresiasPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ client_id: '', plan_id: '', start_date: '', end_date: '', notes: '' })
+    setForm({ client_id: '', plan_id: '', start_date: '', end_date: '', notes: '', preferred_days: [], preferred_hour: '', preferred_space_id: '' })
     setClientSearch('')
     setSelectedClientName('')
     setClientDropdownOpen(false)
@@ -170,6 +212,9 @@ export default function MembresiasPage() {
       start_date: m.start_date.slice(0, 10),
       end_date: m.end_date ? m.end_date.slice(0, 10) : '',
       notes: m.notes || '',
+      preferred_days: m.preferred_days || [],
+      preferred_hour: m.preferred_hour != null ? String(m.preferred_hour) : '',
+      preferred_space_id: m.preferred_space_id || '',
     })
     setClientSearch('')
     setSelectedClientName(m.client_name || '')
@@ -188,6 +233,9 @@ export default function MembresiasPage() {
       start_date: form.start_date,
       end_date: form.end_date || undefined,
       notes: form.notes || undefined,
+      preferred_days: form.preferred_days.length > 0 ? form.preferred_days : undefined,
+      preferred_hour: form.preferred_hour !== '' ? Number(form.preferred_hour) : undefined,
+      preferred_space_id: form.preferred_space_id || undefined,
     }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: payload })
@@ -196,7 +244,7 @@ export default function MembresiasPage() {
     }
   }
 
-  const isSaving = createMutation.isPending || updateMutation.isPending
+  const isSaving = createMutation.isPending || updateMutation.isPending || autoBookMutation.isPending
 
   return (
     <div className="space-y-6">
@@ -292,19 +340,24 @@ export default function MembresiasPage() {
                 {m.end_date && <span>hasta {formatSafeDate(m.end_date)}</span>}
               </div>
 
-              {/* Weekly usage bar (active only) */}
-              {m.status === 'active' && <WeeklyUsageBar membershipId={m.id} />}
+              {/* Horario fijo */}
+              {m.preferred_days && m.preferred_days.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <span>
+                    {m.preferred_days.map(d => ['L','M','X','J','V','S','D'][d]).join(' · ')}
+                    {m.preferred_hour != null && ` · ${m.preferred_hour}:00h`}
+                  </span>
+                  {m.preferred_space_name && (
+                    <span className="text-gray-400">— {m.preferred_space_name}</span>
+                  )}
+                </div>
+              )}
+
+              {/* Monthly usage bar (active only) */}
+              {m.status === 'active' && <MonthlyUsageBar membershipId={m.id} />}
 
               {/* Bottom row */}
-              <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
-                <span
-                  className={`flex items-center gap-1 text-xs font-medium ${
-                    m.makeup_credits > 0 ? 'text-amber-600' : 'text-gray-400'
-                  }`}
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  {m.makeup_credits} repos.
-                </span>
+              <div className="flex items-center justify-end pt-1 flex-wrap gap-2">
                 <div className="flex gap-1.5">
                   <Button
                     variant="outline"
@@ -425,6 +478,78 @@ export default function MembresiasPage() {
                 rows={2}
                 className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
               />
+            </div>
+
+            {/* Horario fijo — opcional */}
+            <div className="border-t border-gray-100 pt-4 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Horario fijo <span className="text-gray-400 font-normal">(opcional)</span></p>
+              <p className="text-xs text-gray-400">Si se configura, se agendarán automáticamente los cupos en el calendario del mes actual.</p>
+
+              {/* Días de la semana */}
+              <div className="space-y-1">
+                <label className="block text-xs text-gray-500">Días</label>
+                <div className="flex gap-1.5 flex-wrap">
+                  {[
+                    { d: 0, label: 'L' }, { d: 1, label: 'M' }, { d: 2, label: 'X' },
+                    { d: 3, label: 'J' }, { d: 4, label: 'V' }, { d: 5, label: 'S' }, { d: 6, label: 'D' }
+                  ].map(({ d, label }) => {
+                    const selected = form.preferred_days.includes(d)
+                    return (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => setForm(f => ({
+                          ...f,
+                          preferred_days: selected
+                            ? f.preferred_days.filter(x => x !== d)
+                            : [...f.preferred_days, d].sort()
+                        }))}
+                        className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
+                          selected
+                            ? 'bg-primary-600 text-white'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Hora y Espacio */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs text-gray-500">Hora</label>
+                  <select
+                    value={form.preferred_hour}
+                    onChange={e => setForm(f => ({ ...f, preferred_hour: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin hora</option>
+                    {Array.from({ length: 16 }, (_, i) => i + 5).map(h => (
+                      <option key={h} value={h}>
+                        {h < 10 ? `0${h}` : h}:00 {h < 12 ? 'am' : h === 12 ? 'pm' : `${h - 12}pm`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Espacio */}
+                <div className="space-y-1">
+                  <label className="block text-xs text-gray-500">Espacio</label>
+                  <select
+                    value={form.preferred_space_id}
+                    onChange={e => setForm(f => ({ ...f, preferred_space_id: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Cualquier espacio</option>
+                    {spacesList.map(s => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">

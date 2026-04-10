@@ -1,0 +1,8 @@
+BEGIN;
+
+ALTER TABLE client_memberships
+  ADD COLUMN IF NOT EXISTS preferred_days JSONB,
+  ADD COLUMN IF NOT EXISTS preferred_hour INTEGER,
+  ADD COLUMN IF NOT EXISTS preferred_space_id UUID REFERENCES spaces(id) ON DELETE SET NULL;
+
+COMMIT;

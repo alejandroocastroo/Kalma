@@ -4,7 +4,7 @@ import type {
   LoginRequest, TokenResponse, ClassType, ClassSession, Client,
   Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession,
   Space, SlotAvailability, RevenueReport, OccupancyReport,
-  Plan, ClientMembership, WeeklyStats
+  Plan, ClientMembership, WeeklyStats, AutoBookResult
 } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -213,6 +213,8 @@ export const memberships = {
     apiClient.post<ClientMembership>(`/memberships/${id}/add-makeup`, { credits }).then(r => r.data),
   weeklyStats: (id: string) =>
     apiClient.get<WeeklyStats>(`/memberships/${id}/weekly-stats`).then(r => r.data),
+  autoBook: (id: string) =>
+    apiClient.post<AutoBookResult>(`/memberships/${id}/auto-book`).then(r => r.data),
 }
 
 // ── Public (no auth) ──────────────────────────────────────────

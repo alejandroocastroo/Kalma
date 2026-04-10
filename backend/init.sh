@@ -11,6 +11,8 @@ psql "$DB_URL" -f migrations/add_schedule.sql
 psql "$DB_URL" -f migrations/make_class_type_optional.sql
 psql "$DB_URL" -f migrations/add_space_to_payments.sql
 psql "$DB_URL" -f migrations/add_session_custom_name.sql
+psql "$DB_URL" -f migrations/add_plans_memberships.sql
+psql "$DB_URL" -f migrations/add_membership_schedule.sql
 
 echo "==> Running seed..."
 python seed.py

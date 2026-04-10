@@ -268,6 +268,16 @@ export interface ClientMembership {
   plan_name?: string
   plan_classes_per_week?: number
   plan_price_cop?: number
+  preferred_days?: number[]       // [0,2,4] → lun=0, mar=1, mié=2, jue=3, vie=4, sáb=5, dom=6
+  preferred_hour?: number         // 0-23
+  preferred_space_id?: string
+  preferred_space_name?: string
+}
+
+export interface AutoBookResult {
+  booked: number
+  skipped: number
+  sessions: string[]
 }
 
 export interface WeeklyStats {
@@ -282,4 +292,10 @@ export interface WeeklyStats {
   total_committed_week: number
   week_start: string
   week_end: string
+  classes_per_month: number
+  used_this_month: number
+  pending_this_month: number
+  total_committed_month: number
+  month_start: string
+  month_end: string
 }
