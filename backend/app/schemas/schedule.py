@@ -47,9 +47,10 @@ class ScheduleExceptionCreate(BaseModel):
 class GenerateSessionsRequest(BaseModel):
     from_date: date
     to_date: date
-    class_type_id: Optional[str] = None
     space_id: str                         # required — capacity comes from the space
     skip_existing: bool = True
+    open_hour: Optional[int] = Field(default=None, ge=0, le=23)
+    close_hour: Optional[int] = Field(default=None, ge=0, le=23)  # inclusive: last session starts here
 
     @model_validator(mode="after")
     def validate_range(self) -> "GenerateSessionsRequest":
@@ -58,6 +59,9 @@ class GenerateSessionsRequest(BaseModel):
         delta = (self.to_date - self.from_date).days
         if delta > 60:
             raise ValueError("El rango máximo es de 60 días")
+        if self.open_hour is not None and self.close_hour is not None:
+            if self.open_hour > self.close_hour:
+                raise ValueError("La hora de apertura no puede ser mayor que la de cierre")
         return self
 
 

@@ -3,7 +3,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
@@ -25,6 +25,9 @@ router = APIRouter(prefix="/schedule", tags=["Horario del Estudio"])
 
 _DEFAULT_OPEN_HOUR = 6
 _DEFAULT_CLOSE_HOUR = 21
+
+# Colombia is permanently UTC-5 (no DST since 1993)
+_BOGOTA_UTC_OFFSET = 5
 
 
 def _require_tenant(current_user) -> None:
@@ -229,70 +232,55 @@ async def generate_sessions(
     current_user=Depends(get_current_active_user),
 ):
     """
-    Auto-generate class sessions for a date range based on the tenant's
-    studio schedule and exceptions.
+    Auto-generate one session per hour for every day in the date range.
+    open_hour / close_hour are interpreted as Bogotá local time (UTC-5).
+    Sessions are stored in UTC so the frontend calendar displays them correctly.
     """
     _require_tenant(current_user)
     _require_admin(current_user)
 
     tenant_id = current_user.tenant_id
 
-    # 1. Load the tenant's full weekly schedule keyed by day_of_week
-    sched_result = await db.execute(
-        select(StudioSchedule).where(StudioSchedule.tenant_id == tenant_id)
-    )
-    schedule_map: dict[int, StudioSchedule] = {
-        r.day_of_week: r for r in sched_result.scalars().all()
-    }
+    open_hour = body.open_hour if body.open_hour is not None else _DEFAULT_OPEN_HOUR
+    close_hour = body.close_hour if body.close_hour is not None else _DEFAULT_CLOSE_HOUR
 
-    # 2. Load all exceptions in the date range
-    exc_result = await db.execute(
-        select(ScheduleException).where(
-            ScheduleException.tenant_id == tenant_id,
-            ScheduleException.date >= body.from_date,
-            ScheduleException.date <= body.to_date,
-        )
-    )
-    exception_map: dict[date, ScheduleException] = {
-        e.date: e for e in exc_result.scalars().all()
-    }
-
-    # 3. Resolve space_id (required) and class_type_id (optional) to UUIDs
+    # 1. Resolve space
     space_uuid = uuid.UUID(body.space_id)
     space = await db.get(Space, space_uuid)
     if not space or space.tenant_id != tenant_id:
         raise HTTPException(404, "Espacio no encontrado")
     resolved_capacity = space.capacity
 
-    class_type_uuid: uuid.UUID | None = uuid.UUID(body.class_type_id) if body.class_type_id else None
+    # 2. Pre-load existing sessions to skip duplicates.
+    #    Since sessions are stored in UTC but our keys use Bogotá local
+    #    (date + local_hour), extend the query window by the UTC offset
+    #    so we don't miss evening sessions stored on the next UTC day.
+    bogota_offset = timedelta(hours=_BOGOTA_UTC_OFFSET)
+    range_start_utc = datetime(
+        body.from_date.year, body.from_date.month, body.from_date.day,
+        0, 0, 0, tzinfo=timezone.utc,
+    ) + bogota_offset  # midnight Bogotá = 05:00 UTC
 
-    # 4. Bulk-load existing sessions in range to avoid per-slot DB hits when
-    #    skip_existing=True. We fetch all sessions for this tenant in the
-    #    date range and index them by (date, start_hour, space_id).
+    range_end_utc = datetime(
+        body.to_date.year, body.to_date.month, body.to_date.day,
+        23, 59, 59, tzinfo=timezone.utc,
+    ) + bogota_offset  # 23:59 Bogotá = 04:59 UTC next day
+
+    sessions_result = await db.execute(
+        select(ClassSession).where(
+            ClassSession.tenant_id == tenant_id,
+            ClassSession.status != "cancelled",
+            ClassSession.start_datetime >= range_start_utc,
+            ClassSession.start_datetime <= range_end_utc,
+        )
+    )
+    # Index by (local Bogotá date, local Bogotá hour, space_id)
     existing_sessions: set[tuple] = set()
-    if body.skip_existing or space_uuid is not None:
-        range_start = datetime(
-            body.from_date.year, body.from_date.month, body.from_date.day,
-            0, 0, 0, tzinfo=timezone.utc,
-        )
-        range_end = datetime(
-            body.to_date.year, body.to_date.month, body.to_date.day,
-            23, 59, 59, tzinfo=timezone.utc,
-        )
-        sessions_result = await db.execute(
-            select(ClassSession).where(
-                ClassSession.tenant_id == tenant_id,
-                ClassSession.status != "cancelled",
-                ClassSession.start_datetime >= range_start,
-                ClassSession.start_datetime <= range_end,
-            )
-        )
-        for s in sessions_result.scalars().all():
-            s_date = s.start_datetime.date()
-            s_hour = s.start_datetime.hour
-            existing_sessions.add((s_date, s_hour, s.space_id))
+    for s in sessions_result.scalars().all():
+        local_dt = s.start_datetime - bogota_offset
+        existing_sessions.add((local_dt.date(), local_dt.hour, s.space_id))
 
-    # 5. Iterate over every date in the range
+    # 3. Iterate every day in the range and create one session per hour slot
     created = 0
     skipped = 0
     dates_processed = 0
@@ -302,55 +290,25 @@ async def generate_sessions(
 
     while current_date <= body.to_date:
         dates_processed += 1
-        dow = current_date.weekday()  # 0=Monday, 6=Sunday — matches our convention
 
-        # a. Check if studio is open this day of week
-        day_schedule = schedule_map.get(dow)
-        if day_schedule is None:
-            # No record means use defaults: Sun closed, others open
-            is_open = dow != 6
-            open_hour = _DEFAULT_OPEN_HOUR
-            close_hour = _DEFAULT_CLOSE_HOUR
-        else:
-            is_open = day_schedule.is_active
-            open_hour = day_schedule.open_hour
-            close_hour = day_schedule.close_hour
+        # close_hour is inclusive: last session STARTS at close_hour
+        for hour in range(open_hour, close_hour + 1):
+            key = (current_date, hour, space_uuid)
+            if key in existing_sessions:
+                skipped += 1
+                continue
 
-        if not is_open:
-            current_date += delta
-            continue
-
-        # b. Check for a closing exception on this date
-        exc = exception_map.get(current_date)
-        if exc is not None and exc.is_closed:
-            current_date += delta
-            continue
-
-        # c. Generate one session per hour slot
-        for hour in range(open_hour, close_hour):
+            # Convert Bogotá local time → UTC for storage
+            # UTC = Bogotá + 5h  (Colombia is permanently UTC-5)
             start_dt = datetime(
                 current_date.year, current_date.month, current_date.day,
-                hour, 0, 0, tzinfo=timezone.utc,
-            )
+                0, 0, 0, tzinfo=timezone.utc,
+            ) + timedelta(hours=hour + _BOGOTA_UTC_OFFSET)
             end_dt = start_dt + timedelta(hours=1)
-
-            # skip_existing: check whether a session at this slot already exists
-            if body.skip_existing:
-                key = (current_date, hour, space_uuid)
-                if key in existing_sessions:
-                    skipped += 1
-                    continue
-
-            # Space overlap guard: skip (not error) if occupied
-            if space_uuid is not None:
-                key = (current_date, hour, space_uuid)
-                if key in existing_sessions:
-                    skipped += 1
-                    continue
 
             session = ClassSession(
                 tenant_id=tenant_id,
-                class_type_id=class_type_uuid,
+                class_type_id=None,
                 space_id=space_uuid,
                 start_datetime=start_dt,
                 end_datetime=end_dt,
@@ -359,9 +317,7 @@ async def generate_sessions(
                 status="scheduled",
             )
             db.add(session)
-            # Track in-memory so subsequent slots in the same batch don't
-            # double-book when the session is not flushed yet.
-            existing_sessions.add((current_date, hour, space_uuid))
+            existing_sessions.add(key)
             created += 1
 
         current_date += delta

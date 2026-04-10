@@ -16,10 +16,10 @@ import type { ClassSession, Client as ClientType } from '@/types'
 // ClassSession may carry space_id from the backend even if not yet in the shared type
 type SessionWithSpace = ClassSession & { space_id?: string | null }
 
-const HOURS = Array.from({ length: 15 }, (_, i) => i + 6) // 6am - 8pm
+const HOURS = Array.from({ length: 18 }, (_, i) => i + 6) // 6am - 11pm (23:00)
 
 // ─── Time picker hours available in CreateSessionForm ────────────────────────
-const TIME_HOURS = Array.from({ length: 16 }, (_, i) => i + 6) // 6:00 – 21:00
+const TIME_HOURS = Array.from({ length: 18 }, (_, i) => i + 6) // 6:00 – 23:00
 
 // ─── Duration options ─────────────────────────────────────────────────────────
 const DURATION_OPTIONS = [
@@ -776,7 +776,7 @@ export default function AgendaPage() {
         </div>
 
         {/* Time slots */}
-        <div className="overflow-y-auto max-h-[600px]">
+        <div className="overflow-y-auto max-h-[900px]">
           {HOURS.map((hour) => (
             <div key={hour} className="grid grid-cols-8 border-b border-gray-50">
               <div className="p-2 text-xs text-gray-400 border-r border-gray-100 text-right pr-3 pt-3">

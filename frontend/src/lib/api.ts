@@ -186,9 +186,10 @@ export const schedule = {
   generate: (data: {
     from_date: string
     to_date: string
-    class_type_id?: string
     space_id: string
     skip_existing: boolean
+    open_hour?: number
+    close_hour?: number
   }) => apiClient.post('/schedule/generate', data).then((r) => r.data),
 }
 
