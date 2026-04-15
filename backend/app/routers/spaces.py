@@ -34,7 +34,10 @@ async def list_spaces(
     _require_tenant(current_user)
     result = await db.execute(
         select(Space)
-        .where(Space.tenant_id == current_user.tenant_id)
+        .where(
+            Space.tenant_id == current_user.tenant_id,
+            Space.is_active == True,
+        )
         .order_by(Space.name)
     )
     return result.scalars().all()

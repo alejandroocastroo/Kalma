@@ -31,6 +31,11 @@ export default function EspaciosPage() {
     onError: () => toast.error('Error al desactivar espacio'),
   })
 
+  const handleDelete = (space: Space) => {
+    if (!confirm(`¿Desactivar el espacio "${space.name}"? Dejará de aparecer en el sistema.`)) return
+    deleteMutation.mutate(space.id)
+  }
+
   const handleEdit = (space: Space) => {
     setEditing(space)
     setShowForm(true)
@@ -93,7 +98,7 @@ export default function EspaciosPage() {
                     <Edit className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => deleteMutation.mutate(space.id)}
+                    onClick={() => handleDelete(space)}
                     disabled={deleteMutation.isPending}
                     title="Desactivar espacio"
                     className="p-1.5 text-gray-400 hover:text-red-500 transition rounded-lg hover:bg-red-50 text-xs flex items-center gap-1"
