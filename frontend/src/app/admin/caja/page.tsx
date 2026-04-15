@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { StatsCard } from '@/components/admin/stats-card'
 import { formatCOP, categoryLabels, paymentMethodLabels } from '@/lib/utils'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
-import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2 } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { Space } from '@/types'
@@ -52,6 +52,7 @@ export default function CajaPage() {
   const [showIncome, setShowIncome] = useState(false)
   const [showExpense, setShowExpense] = useState(false)
   const [activeSpace, setActiveSpace] = useState<string | null>(null)
+  const [exporting, setExporting] = useState(false)
   const qc = useQueryClient()
 
   const params = { start: startDate, end: endDate }
@@ -100,6 +101,17 @@ export default function CajaPage() {
     qc.invalidateQueries({ queryKey: ['payment-summary'] })
   }
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await payments.exportExcel({ start: startDate, end: endDate })
+    } catch {
+      toast.error('Error al generar el Excel')
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Filters */}
@@ -113,6 +125,10 @@ export default function CajaPage() {
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={handleExport} disabled={exporting}>
+            <FileSpreadsheet className="w-4 h-4 mr-1" />
+            {exporting ? 'Generando...' : 'Exportar Excel'}
+          </Button>
           <Button onClick={() => setShowIncome(true)}>
             <Plus className="w-4 h-4 mr-1" /> Ingreso
           </Button>

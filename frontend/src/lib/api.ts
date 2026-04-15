@@ -148,6 +148,19 @@ export const payments = {
   delete: (id: string) => apiClient.delete(`/payments/${id}`).then((r) => r.data),
   summary: (params?: { start?: string; end?: string; space_id?: string }) =>
     apiClient.get<CashFlowSummary>('/payments/summary', { params }).then((r) => r.data),
+  exportExcel: async (params: { start?: string; end?: string }) => {
+    const res = await apiClient.get('/export/contabilidad', { params, responseType: 'blob' })
+    const url = window.URL.createObjectURL(new Blob([res.data]))
+    const link = document.createElement('a')
+    link.href = url
+    const cd = res.headers['content-disposition'] || ''
+    const match = cd.match(/filename="?([^"]+)"?/)
+    link.download = match ? match[1] : 'Contabilidad.xlsx'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+  },
 }
 
 // ── Spaces ────────────────────────────────────────────────────
