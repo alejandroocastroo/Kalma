@@ -199,10 +199,22 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     document_number: initial?.document_number || '',
   })
   const [loading, setLoading] = useState(false)
+  const [docError, setDocError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.full_name) { toast.error('El nombre es requerido'); return }
+
+    // Validación de cédula: mínimo 9 dígitos si se ingresa
+    if (form.document_number) {
+      const digits = form.document_number.replace(/\D/g, '')
+      if (digits.length < 9) {
+        setDocError('El número de documento debe tener al menos 9 dígitos')
+        return
+      }
+    }
+    setDocError('')
+
     setLoading(true)
     try {
       if (clientId) {
@@ -213,11 +225,20 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
         toast.success('Cliente creado')
       }
       onClose()
-    } catch { toast.error('Error al guardar') } finally { setLoading(false) }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      if (err?.response?.status === 409) {
+        setDocError(typeof detail === 'string' ? detail : 'Ya existe un cliente con ese número de documento')
+      } else {
+        toast.error(typeof detail === 'string' ? detail : 'Error al guardar')
+      }
+    } finally { setLoading(false) }
   }
 
-  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
+  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({ ...form, [field]: e.target.value })
+    if (field === 'document_number') setDocError('')
+  }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -244,7 +265,13 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Nro. documento</label>
-          <Input placeholder="12345678" value={form.document_number} onChange={f('document_number')} />
+          <Input
+            placeholder="1234567890"
+            value={form.document_number}
+            onChange={f('document_number')}
+            className={docError ? 'border-red-400 focus-visible:ring-red-400' : ''}
+          />
+          {docError && <p className="mt-1 text-xs text-red-500">{docError}</p>}
         </div>
       </div>
       <div className="flex gap-2 pt-2">

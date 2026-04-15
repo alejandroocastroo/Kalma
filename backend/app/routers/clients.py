@@ -55,6 +55,15 @@ async def create_client(
 ):
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
+    if body.document_number:
+        dup = await db.execute(
+            select(Client).where(
+                Client.tenant_id == current_user.tenant_id,
+                Client.document_number == body.document_number,
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise HTTPException(409, "Ya existe un cliente con ese número de documento")
     client = Client(tenant_id=current_user.tenant_id, **body.model_dump())
     db.add(client)
     await db.commit()
@@ -96,6 +105,16 @@ async def update_client(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(404, "Cliente no encontrado")
+    if body.document_number:
+        dup = await db.execute(
+            select(Client).where(
+                Client.tenant_id == current_user.tenant_id,
+                Client.document_number == body.document_number,
+                Client.id != uuid.UUID(client_id),
+            )
+        )
+        if dup.scalar_one_or_none():
+            raise HTTPException(409, "Ya existe un cliente con ese número de documento")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(client, field, value)
     await db.commit()

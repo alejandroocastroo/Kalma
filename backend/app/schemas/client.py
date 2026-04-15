@@ -1,7 +1,20 @@
+import re
 import uuid
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, field_validator
+
+
+def _validate_document_number(v: Optional[str]) -> Optional[str]:
+    if v is None:
+        return v
+    v = v.strip()
+    if not v:
+        return None
+    digits = re.sub(r'\D', '', v)
+    if len(digits) < 9:
+        raise ValueError('El número de documento debe tener al menos 9 dígitos')
+    return v
 
 
 class ClientCreate(BaseModel):
@@ -15,6 +28,11 @@ class ClientCreate(BaseModel):
     emergency_contact_phone: Optional[str] = None
     notes: Optional[str] = None
 
+    @field_validator('document_number')
+    @classmethod
+    def validate_document_number(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_document_number(v)
+
 
 class ClientUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -27,6 +45,11 @@ class ClientUpdate(BaseModel):
     emergency_contact_phone: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
+
+    @field_validator('document_number')
+    @classmethod
+    def validate_document_number(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_document_number(v)
 
 
 class ClientResponse(BaseModel):
