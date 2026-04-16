@@ -30,7 +30,7 @@ export default function LoginPage() {
       const response = await auth.login(data)
       saveAuthData(response)
       toast.success(`Bienvenid@, ${response.user_name}`)
-      router.push('/admin/dashboard')
+      router.push(response.user_role === 'superadmin' ? '/superadmin' : '/admin/dashboard')
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Credenciales incorrectas')
     } finally {

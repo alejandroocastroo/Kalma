@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.middleware.tenant import TenantMiddleware
-from app.routers import auth, class_types, class_sessions, clients, appointments, payments, public, spaces, reports, schedule, plans, memberships, export
+from app.routers import auth, class_types, class_sessions, clients, appointments, payments, public, spaces, reports, schedule, plans, memberships, export, superadmin
 
 
 @asynccontextmanager
@@ -46,6 +46,7 @@ app.include_router(schedule.router, prefix=PREFIX)
 app.include_router(plans.router, prefix=PREFIX)
 app.include_router(memberships.router, prefix=PREFIX)
 app.include_router(export.router, prefix=PREFIX)
+app.include_router(superadmin.router, prefix=PREFIX)
 
 
 @app.get("/health")

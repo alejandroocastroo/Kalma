@@ -89,3 +89,9 @@ def require_role(*roles: str) -> Callable:
             )
         return current_user
     return role_checker
+
+
+async def require_superadmin(current_user=Depends(get_current_active_user)):
+    if current_user.role != "superadmin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Acceso exclusivo para superadmin")
+    return current_user

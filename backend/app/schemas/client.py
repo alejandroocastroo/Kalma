@@ -17,16 +17,8 @@ def _validate_document_number(v: Optional[str]) -> Optional[str]:
     return v
 
 
-class ClientCreate(BaseModel):
-    full_name: str
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    document_type: str = "CC"
+class _ClientDocMixin(BaseModel):
     document_number: Optional[str] = None
-    birth_date: Optional[date] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
-    notes: Optional[str] = None
 
     @field_validator('document_number')
     @classmethod
@@ -34,22 +26,27 @@ class ClientCreate(BaseModel):
         return _validate_document_number(v)
 
 
-class ClientUpdate(BaseModel):
+class ClientCreate(_ClientDocMixin):
+    full_name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    document_type: str = "CC"
+    birth_date: Optional[date] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class ClientUpdate(_ClientDocMixin):
     full_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     document_type: Optional[str] = None
-    document_number: Optional[str] = None
     birth_date: Optional[date] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     notes: Optional[str] = None
     is_active: Optional[bool] = None
-
-    @field_validator('document_number')
-    @classmethod
-    def validate_document_number(cls, v: Optional[str]) -> Optional[str]:
-        return _validate_document_number(v)
 
 
 class ClientResponse(BaseModel):

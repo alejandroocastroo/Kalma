@@ -19,8 +19,8 @@ export function middleware(request: NextRequest) {
     }
   }
 
-  // Protect /admin routes
-  if (pathname.startsWith('/admin')) {
+  // Protect /admin and /superadmin routes
+  if (pathname.startsWith('/admin') || pathname.startsWith('/superadmin')) {
     const token = request.cookies.get('kalma_token')?.value
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url))
