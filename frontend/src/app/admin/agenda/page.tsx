@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classSessions, appointments, spaces, clients } from '@/lib/api'
+import { classSessions, appointments, spaces, clients, classTypes } from '@/lib/api'
 import { SessionCard } from '@/components/admin/session-card'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -61,6 +61,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const [duration, setDuration] = useState(60)
 
   // Shared state
+  const [classTypeId, setClassTypeId] = useState('')
   const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
@@ -72,6 +73,13 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
     queryKey: ['spaces'],
     queryFn: spaces.list,
   })
+
+  const { data: classTypeList = [] } = useQuery({
+    queryKey: ['class-types'],
+    queryFn: classTypes.list,
+  })
+
+  const selectedClassType = classTypeList.find((ct) => ct.id === classTypeId) ?? null
 
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
@@ -101,22 +109,24 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
       let startISO: string
       let endISO: string
 
+      const effectiveDuration = selectedClassType?.duration_minutes ?? duration
+
       if (tab === 'hour') {
-        startISO = buildISO(initialDate, selectedHour) + '.000Z'
-        // Strip the fake Z — use local ISO for the API
         startISO = new Date(buildISO(initialDate, selectedHour)).toISOString()
-        endISO = new Date(buildISO(initialDate, selectedHour + 1)).toISOString()
+        endISO = new Date(new Date(buildISO(initialDate, selectedHour)).getTime() + effectiveDuration * 60000).toISOString()
       } else {
         const startDate = new Date(specificDatetime)
         startISO = startDate.toISOString()
-        endISO = new Date(startDate.getTime() + duration * 60000).toISOString()
+        endISO = new Date(startDate.getTime() + effectiveDuration * 60000).toISOString()
       }
 
       const session = await classSessions.create({
         space_id: spaceId,
         start_datetime: startISO,
         end_datetime: endISO,
+        ...(classTypeId && { class_type_id: classTypeId }),
         ...(customName.trim() && { custom_name: customName.trim() }),
+        ...(selectedClassType && { capacity: selectedClassType.capacity }),
       })
 
       if (selectedClient) {
@@ -195,7 +205,9 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
               ))}
             </div>
           </div>
-          <p className="text-xs text-gray-500">Duración fija: 60 minutos</p>
+          <p className="text-xs text-gray-500">
+            Duración: {selectedClassType ? `${selectedClassType.duration_minutes} min (del tipo de clase)` : '60 min (fija)'}
+          </p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -210,6 +222,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
               className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
             />
           </div>
+          {!selectedClassType && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Duración
@@ -230,10 +243,41 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
               ))}
             </div>
           </div>
+          )}
+          {selectedClassType && (
+            <p className="text-xs text-gray-500">
+              Duración: <span className="font-medium">{selectedClassType.duration_minutes} min</span>
+            </p>
+          )}
         </div>
       )}
 
-      {/* Custom name — optional */}
+      {/* Class type selector — optional */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Tipo de clase (opcional)
+        </label>
+        <select
+          value={classTypeId}
+          onChange={(e) => setClassTypeId(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+        >
+          <option value="">Sin tipo de clase</option>
+          {classTypeList.map((ct) => (
+            <option key={ct.id} value={ct.id}>
+              {ct.name} — {ct.duration_minutes} min · cap. {ct.capacity}
+            </option>
+          ))}
+        </select>
+        {selectedClassType && (
+          <p className="text-xs text-gray-400 mt-1">
+            Duración y capacidad se tomarán del tipo de clase seleccionado.
+          </p>
+        )}
+      </div>
+
+      {/* Custom name — optional, only shown if no class type selected */}
+      {!classTypeId && (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Nombre de la clase (opcional)
@@ -246,6 +290,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
           className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
         />
       </div>
+      )}
 
       {/* Space selector — required */}
       <div>
@@ -351,7 +396,13 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
     queryFn: spaces.list,
   })
 
+  const { data: classTypeList = [] } = useQuery({
+    queryKey: ['class-types'],
+    queryFn: classTypes.list,
+  })
+
   const today = format(new Date(), 'yyyy-MM-dd')
+  const [classTypeId, setClassTypeId] = useState('')
   const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
   const [date, setDate] = useState(today)
@@ -360,6 +411,8 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
   const [durationMode, setDurationMode] = useState<'fixed' | 'custom'>('fixed')
   const [customDuration, setCustomDuration] = useState(60)
   const [loading, setLoading] = useState(false)
+
+  const selectedClassType = classTypeList.find((ct) => ct.id === classTypeId) ?? null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -378,7 +431,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
 
     setLoading(true)
     try {
-      const durationMin = durationMode === 'fixed' ? 60 : customDuration
+      const durationMin = selectedClassType?.duration_minutes ?? (durationMode === 'fixed' ? 60 : customDuration)
       const start = new Date(buildISO(date, selectedHour))
       const end = new Date(start.getTime() + durationMin * 60000)
 
@@ -386,7 +439,9 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
         space_id: spaceId,
         start_datetime: start.toISOString(),
         end_datetime: end.toISOString(),
+        ...(classTypeId && { class_type_id: classTypeId }),
         ...(customName.trim() && { custom_name: customName.trim() }),
+        ...(selectedClassType && { capacity: selectedClassType.capacity }),
       })
       toast.success('Sesión creada')
       onClose()
@@ -399,7 +454,32 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
-      {/* Custom name — optional */}
+      {/* Class type selector — optional */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Tipo de clase (opcional)
+        </label>
+        <select
+          value={classTypeId}
+          onChange={(e) => setClassTypeId(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+        >
+          <option value="">Sin tipo de clase</option>
+          {classTypeList.map((ct) => (
+            <option key={ct.id} value={ct.id}>
+              {ct.name} — {ct.duration_minutes} min · cap. {ct.capacity}
+            </option>
+          ))}
+        </select>
+        {selectedClassType && (
+          <p className="text-xs text-gray-400 mt-1">
+            Duración y capacidad se tomarán del tipo de clase seleccionado.
+          </p>
+        )}
+      </div>
+
+      {/* Custom name — optional, only shown if no class type selected */}
+      {!classTypeId && (
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
           Nombre de la clase (opcional)
@@ -412,6 +492,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
           className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
         />
       </div>
+      )}
 
       {/* Space selector — required */}
       <div>
@@ -468,8 +549,8 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
         </div>
       </div>
 
-      {/* Duration toggle */}
-      <div>
+      {/* Duration toggle — hidden when class type is selected (duration comes from class type) */}
+      {!selectedClassType && <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
           Duración
         </label>
@@ -516,7 +597,13 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
             ))}
           </div>
         )}
-      </div>
+      </div>}
+
+      {selectedClassType && (
+        <p className="text-xs text-gray-500 -mt-2">
+          Duración: <span className="font-medium">{selectedClassType.duration_minutes} min</span>
+        </p>
+      )}
 
       <div className="flex gap-2 pt-1">
         <Button type="submit" disabled={loading}>
