@@ -486,7 +486,9 @@ async def export_contabilidad(
 
     start_label = (start or "inicio").replace("-", "")
     end_label = (end or "fin").replace("-", "")
-    filename = f"Contabilidad_{tenant_name.replace(' ', '_')}_{start_label}_{end_label}.xlsx"
+    import re
+    safe_name = re.sub(r'[^\w\s-]', '', tenant_name).strip().replace(' ', '_')
+    filename = f"Contabilidad_{safe_name}_{start_label}_{end_label}.xlsx"
 
     return StreamingResponse(
         buffer,

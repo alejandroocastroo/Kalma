@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import AsyncSessionLocal
+from app.config import settings
 
 
 class TenantMiddleware(BaseHTTPMiddleware):
@@ -27,9 +28,10 @@ class TenantMiddleware(BaseHTTPMiddleware):
         if len(parts) >= 3 and parts[0] not in reserved:
             return parts[0].lower()
 
-        # 3. Query param (solo desarrollo)
-        if slug := request.query_params.get("tenant"):
-            return slug.lower()
+        # 3. Query param (solo desarrollo — desactivado en producción)
+        if settings.ENVIRONMENT != "production":
+            if slug := request.query_params.get("tenant"):
+                return slug.lower()
 
         return None
 

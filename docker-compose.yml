@@ -14,8 +14,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-kalma}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-kalma} -d ${POSTGRES_DB:-kalma}"]
       interval: 10s
@@ -34,8 +32,6 @@ services:
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-kalmaRedis123}
     volumes:
       - redis_data:/data
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "--auth", "${REDIS_PASSWORD:-kalmaRedis123}", "ping"]
       interval: 10s

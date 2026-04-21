@@ -45,6 +45,27 @@ export const removeStoredUser = () => localStorage.removeItem(USER_KEY)
 
 export const isAuthenticated = (): boolean => !!getToken()
 
+// Sets an HttpOnly cookie via a Next.js API route (inaccessible to JS/XSS)
+const setSessionCookie = async (token: string) => {
+  try {
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token }),
+    })
+  } catch {
+    // Non-blocking — localStorage is still used by apiClient
+  }
+}
+
+const clearSessionCookie = async () => {
+  try {
+    await fetch('/api/auth/session', { method: 'DELETE' })
+  } catch {
+    // Non-blocking
+  }
+}
+
 export const saveAuthData = (data: TokenResponse) => {
   setToken(data.access_token)
   setRefreshToken(data.refresh_token)
@@ -56,12 +77,8 @@ export const saveAuthData = (data: TokenResponse) => {
     role: data.user_role as User['role'],
     tenant_id: data.tenant_id,
   })
-  // Cookie para que el middleware de Next.js pueda verificar auth en SSR
-  document.cookie = `kalma_token=${data.access_token}; path=/; max-age=${60 * 60 * 24}`
-}
-
-export const clearAuthCookie = () => {
-  document.cookie = 'kalma_token=; path=/; max-age=0'
+  // Set HttpOnly cookie for Next.js middleware SSR auth check
+  setSessionCookie(data.access_token)
 }
 
 export const logout = () => {
@@ -69,6 +86,6 @@ export const logout = () => {
   removeRefreshToken()
   removeTenantSlug()
   removeStoredUser()
-  clearAuthCookie()
+  clearSessionCookie()
   window.location.href = '/login'
 }

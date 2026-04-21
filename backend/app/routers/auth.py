@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.database import get_db
+from app.limiter import limiter
 from app.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 from app.auth.jwt import (
     verify_password, create_access_token, create_refresh_token,
@@ -13,7 +14,8 @@ router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("10/minute")
+async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
     from app.models.user import User
     from app.models.tenant import Tenant
 
@@ -44,7 +46,8 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     from app.models.user import User
     from app.models.tenant import Tenant
 

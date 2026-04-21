@@ -1,8 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app.config import settings
+from app.limiter import limiter
 from app.middleware.tenant import TenantMiddleware
 from app.routers import auth, class_types, class_sessions, clients, appointments, payments, public, spaces, reports, schedule, plans, memberships, export, superadmin
 from app.routers.cobros import router as cobros_router
@@ -18,15 +21,22 @@ app = FastAPI(
     version="1.0.0",
     description="API para gestión de gimnasios y estudios de fitness",
     lifespan=lifespan,
+    docs_url="/docs" if settings.ENVIRONMENT != "production" else None,
+    redoc_url="/redoc" if settings.ENVIRONMENT != "production" else None,
+    openapi_url="/openapi.json" if settings.ENVIRONMENT != "production" else None,
 )
+
+# Rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Tenant-Slug"],
 )
 
 # Tenant middleware
@@ -58,4 +68,4 @@ async def health():
 
 @app.get("/")
 async def root():
-    return {"app": "Kalma API", "version": "1.0.0", "docs": "/docs"}
+    return {"app": "Kalma API", "version": "1.0.0"}

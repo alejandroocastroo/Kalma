@@ -1,11 +1,12 @@
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Optional
 from pydantic import BaseModel
 
 from app.database import get_db
+from app.limiter import limiter
 from app.models.tenant import Tenant
 from app.models.class_type import ClassType
 from app.models.class_session import ClassSession
@@ -120,7 +121,8 @@ async def public_schedule(
 
 
 @router.post("/{slug}/book")
-async def public_book(slug: str, body: PublicBookingRequest, db: AsyncSession = Depends(get_db)):
+@limiter.limit("20/minute")
+async def public_book(request: Request, slug: str, body: PublicBookingRequest, db: AsyncSession = Depends(get_db)):
     import uuid as uuid_lib
 
     result = await db.execute(
