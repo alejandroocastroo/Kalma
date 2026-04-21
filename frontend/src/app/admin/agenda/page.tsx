@@ -1,13 +1,13 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classSessions, appointments, spaces, clients, classTypes } from '@/lib/api'
+import { classSessions, appointments, spaces, clients, classTypes, memberships, apiClient } from '@/lib/api'
 import { SessionCard } from '@/components/admin/session-card'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatDateTime, formatCOP, appointmentStatusConfig } from '@/lib/utils'
-import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus, Pencil } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus, Pencil, AlertCircle } from 'lucide-react'
 import { format, addWeeks, subWeeks, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
@@ -69,6 +69,13 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
+  // Debt dialog state for QuickBookModal
+  const [debtDialog, setDebtDialog] = useState<{
+    open: boolean
+    clientName: string
+    onConfirm: (isDebt: boolean) => void
+  }>({ open: false, clientName: '', onConfirm: () => {} })
+
   const { data: spaceList = [] } = useQuery({
     queryKey: ['spaces'],
     queryFn: spaces.list,
@@ -98,12 +105,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
     )
   }, [allClients, clientSearch])
 
-  const handleSubmit = async () => {
-    if (!spaceId) {
-      toast.error('Selecciona un espacio')
-      return
-    }
-
+  const doCreateSession = async (isDebt: boolean) => {
     setLoading(true)
     try {
       let startISO: string
@@ -135,6 +137,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
           client_id: selectedClient.id,
           status: 'confirmed',
           paid: false,
+          is_debt: isDebt,
         })
         qc.invalidateQueries({ queryKey: ['appointments'] })
         toast.success('Sesión creada y cliente agendado')
@@ -149,6 +152,37 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleSubmit = async () => {
+    if (!spaceId) {
+      toast.error('Selecciona un espacio')
+      return
+    }
+
+    if (selectedClient) {
+      // Check active membership before booking
+      try {
+        const activeMembershipsResp = await memberships.list({ client_id: selectedClient.id, status: 'active' })
+        const activeMemberships = activeMembershipsResp.items ?? activeMembershipsResp
+        if ((activeMemberships as unknown[]).length === 0) {
+          // No active membership — show debt dialog
+          setDebtDialog({
+            open: true,
+            clientName: selectedClient.full_name,
+            onConfirm: (isDebt: boolean) => {
+              setDebtDialog((d) => ({ ...d, open: false }))
+              doCreateSession(isDebt)
+            },
+          })
+          return
+        }
+      } catch {
+        // If check fails, continue normally
+      }
+    }
+
+    doCreateSession(false)
   }
 
   return (
@@ -385,6 +419,34 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
           Cancelar
         </Button>
       </div>
+
+      {/* Debt dialog */}
+      <Dialog
+        open={debtDialog.open}
+        onOpenChange={(open) => !open && setDebtDialog((d) => ({ ...d, open: false }))}
+      >
+        <DialogContent title="Cliente sin membresía activa">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">{debtDialog.clientName}</span> no tiene un plan activo.
+              ¿Cómo desea registrar esta clase?
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={() => debtDialog.onConfirm(false)}>
+                Ya pagó la clase
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                onClick={() => debtDialog.onConfirm(true)}
+              >
+                <AlertCircle className="h-4 w-4 mr-1.5" />
+                Registrar como deuda
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -727,6 +789,13 @@ export default function AgendaPage() {
   const [addClientDropdownOpen, setAddClientDropdownOpen] = useState(false)
   const [isAddingClient, setIsAddingClient] = useState(false)
 
+  // Debt dialog state for the "add client to session" flow
+  const [addClientDebtDialog, setAddClientDebtDialog] = useState<{
+    open: boolean
+    clientName: string
+    onConfirm: (isDebt: boolean) => void
+  }>({ open: false, clientName: '', onConfirm: () => {} })
+
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
     queryFn: () => clients.list({ limit: 100 }),
@@ -744,12 +813,8 @@ export default function AgendaPage() {
     )
   }, [allClients, addClientSearch])
 
-  const handleAddClient = async (client: ClientType) => {
+  const doAddClient = async (client: ClientType, isDebt: boolean) => {
     if (!selectedSession) return
-    if (selectedSession.enrolled_count >= selectedSession.capacity) {
-      toast.error('La sesión está llena')
-      return
-    }
     setIsAddingClient(true)
     try {
       await appointments.create({
@@ -757,6 +822,7 @@ export default function AgendaPage() {
         client_id: client.id,
         status: 'confirmed',
         paid: false,
+        is_debt: isDebt,
       })
       qc.invalidateQueries({ queryKey: ['appointments', selectedSession.id] })
       qc.invalidateQueries({ queryKey: ['week-sessions'] })
@@ -768,6 +834,35 @@ export default function AgendaPage() {
     } finally {
       setIsAddingClient(false)
     }
+  }
+
+  const handleAddClient = async (client: ClientType) => {
+    if (!selectedSession) return
+    if (selectedSession.enrolled_count >= selectedSession.capacity) {
+      toast.error('La sesión está llena')
+      return
+    }
+
+    // Check active membership
+    try {
+      const activeMembershipsResp = await memberships.list({ client_id: client.id, status: 'active' })
+      const activeMembershipsArr = activeMembershipsResp.items ?? activeMembershipsResp
+      if ((activeMembershipsArr as unknown[]).length === 0) {
+        setAddClientDebtDialog({
+          open: true,
+          clientName: client.full_name,
+          onConfirm: (isDebt: boolean) => {
+            setAddClientDebtDialog((d) => ({ ...d, open: false }))
+            doAddClient(client, isDebt)
+          },
+        })
+        return
+      }
+    } catch {
+      // If membership check fails, continue normally
+    }
+
+    doAddClient(client, false)
   }
 
   const getSessionsForDay = (day: Date) =>
@@ -1047,7 +1142,12 @@ export default function AgendaPage() {
                           className="flex items-center justify-between py-2 border-b border-gray-50"
                         >
                           <div>
-                            <p className="text-sm font-medium">{appt.client_name}</p>
+                            <p className={`text-sm font-medium ${appt.is_debt ? 'text-red-600' : ''}`}>
+                              {appt.client_name}
+                              {appt.is_debt && (
+                                <span className="ml-1.5 text-xs font-normal">(debe)</span>
+                              )}
+                            </p>
                             <p className="text-xs text-gray-500">{appt.client_phone}</p>
                           </div>
                           <div className="flex items-center gap-2">
@@ -1190,6 +1290,34 @@ export default function AgendaPage() {
               qc.invalidateQueries({ queryKey: ['week-sessions'] })
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Debt dialog — add client to existing session */}
+      <Dialog
+        open={addClientDebtDialog.open}
+        onOpenChange={(open) => !open && setAddClientDebtDialog((d) => ({ ...d, open: false }))}
+      >
+        <DialogContent title="Cliente sin membresía activa">
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700">
+              <span className="font-medium">{addClientDebtDialog.clientName}</span> no tiene un plan activo.
+              ¿Cómo desea registrar esta clase?
+            </p>
+            <div className="flex gap-2">
+              <Button onClick={() => addClientDebtDialog.onConfirm(false)}>
+                Ya pagó la clase
+              </Button>
+              <Button
+                variant="outline"
+                className="text-red-600 border-red-300 hover:bg-red-50"
+                onClick={() => addClientDebtDialog.onConfirm(true)}
+              >
+                <AlertCircle className="h-4 w-4 mr-1.5" />
+                Registrar como deuda
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

@@ -4,7 +4,7 @@ import type {
   LoginRequest, TokenResponse, ClassType, ClassSession, Client,
   Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession,
   Space, SlotAvailability, RevenueReport, OccupancyReport,
-  Plan, ClientMembership, WeeklyStats, AutoBookResult
+  Plan, ClientMembership, MembershipsListResponse, WeeklyStats, AutoBookResult
 } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -203,23 +203,32 @@ export const schedule = {
     skip_existing: boolean
     open_hour?: number
     close_hour?: number
+    blocked_hours?: number[]
   }) => apiClient.post('/schedule/generate', data).then((r) => r.data),
 }
 
 // ── Plans ─────────────────────────────────────────────────────
 export const plans = {
   list: () => apiClient.get<Plan[]>('/plans').then(r => r.data),
-  create: (data: Partial<Plan>) => apiClient.post<Plan>('/plans', data).then(r => r.data),
-  update: (id: string, data: Partial<Plan>) => apiClient.put<Plan>(`/plans/${id}`, data).then(r => r.data),
+  create: (data: Partial<Plan> & { membership_type?: string; sessions_per_week?: number | null; space_id?: string | null }) =>
+    apiClient.post<Plan>('/plans', data).then(r => r.data),
+  update: (id: string, data: Partial<Plan> & { membership_type?: string; sessions_per_week?: number | null; space_id?: string | null }) =>
+    apiClient.put<Plan>(`/plans/${id}`, data).then(r => r.data),
   delete: (id: string) => apiClient.delete(`/plans/${id}`).then(r => r.data),
 }
 
 // ── Memberships ───────────────────────────────────────────────
 export const memberships = {
-  list: (params?: { client_id?: string; status?: string }) =>
-    apiClient.get<ClientMembership[]>('/memberships', { params }).then(r => r.data),
+  list: (params?: { client_id?: string; status?: string; search?: string; space_id?: string; page?: number; limit?: number }) =>
+    apiClient.get<MembershipsListResponse>('/memberships', { params }).then(r => r.data),
   create: (data: { client_id: string; plan_id: string; start_date: string; end_date?: string; notes?: string }) =>
     apiClient.post<ClientMembership>('/memberships', data).then(r => r.data),
+  createV2: (data: {
+    client_id: string; plan_id: string; membership_type: 'monthly' | 'session_based';
+    start_date: string; sessions_per_week?: number; scheduled_days?: string[];
+    makeups_allowed?: number; notes?: string; preferred_days?: number[];
+    preferred_hour?: number; preferred_space_id?: string;
+  }) => apiClient.post<ClientMembership>('/memberships/v2', data).then(r => r.data),
   update: (id: string, data: Partial<ClientMembership>) =>
     apiClient.put<ClientMembership>(`/memberships/${id}`, data).then(r => r.data),
   autoDeduct: () => apiClient.post<{ updated: number }>('/memberships/auto-deduct').then(r => r.data),
@@ -229,6 +238,10 @@ export const memberships = {
     apiClient.get<WeeklyStats>(`/memberships/${id}/weekly-stats`).then(r => r.data),
   autoBook: (id: string) =>
     apiClient.post<AutoBookResult>(`/memberships/${id}/auto-book`).then(r => r.data),
+  createMakeup: (membershipId: string, data: { original_date: string; makeup_date?: string; class_session_id?: string; notes?: string }) =>
+    apiClient.post(`/memberships/${membershipId}/makeups`, data).then(r => r.data),
+  listMakeups: (membershipId: string) =>
+    apiClient.get(`/memberships/${membershipId}/makeups`).then(r => r.data),
 }
 
 // ── Public (no auth) ──────────────────────────────────────────

@@ -1,5 +1,5 @@
 from datetime import date
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -51,6 +51,7 @@ class GenerateSessionsRequest(BaseModel):
     skip_existing: bool = True
     open_hour: Optional[int] = Field(default=None, ge=0, le=23)
     close_hour: Optional[int] = Field(default=None, ge=0, le=23)  # inclusive: last session starts here
+    blocked_hours: List[int] = []  # horas a omitir, ej: [12, 13] para bloquear 12pm y 1pm
 
     @model_validator(mode="after")
     def validate_range(self) -> "GenerateSessionsRequest":

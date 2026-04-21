@@ -24,6 +24,7 @@ function GenerateSessionsSection() {
   const [toDate, setToDate] = useState('')
   const [openHour, setOpenHour] = useState(6)
   const [closeHour, setCloseHour] = useState(21)
+  const [blockedHours, setBlockedHours] = useState<number[]>([])
   const [spaceId, setSpaceId] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<GenerateSessionsResult | null>(null)
@@ -62,6 +63,7 @@ function GenerateSessionsSection() {
         skip_existing: true,
         open_hour: openHour,
         close_hour: closeHour,
+        blocked_hours: blockedHours,
       })
       setResult(data as GenerateSessionsResult)
       toast.success('Sesiones generadas correctamente')
@@ -162,6 +164,44 @@ function GenerateSessionsSection() {
               </option>
             ))}
           </select>
+        </div>
+
+        {/* Blocked hours */}
+        <div className="sm:col-span-2 space-y-2">
+          <label className="block text-sm font-medium text-gray-700">
+            Horas sin servicio
+            <span className="ml-1.5 text-xs font-normal text-gray-400">
+              (selecciona las horas que quieres omitir — ej: almuerzo)
+            </span>
+          </label>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from({ length: closeHour - openHour + 1 }, (_, i) => openHour + i).map(hour => {
+              const isBlocked = blockedHours.includes(hour)
+              const label = `${hour}:00`
+              return (
+                <button
+                  key={hour}
+                  type="button"
+                  onClick={() => setBlockedHours(prev =>
+                    isBlocked ? prev.filter(h => h !== hour) : [...prev, hour].sort((a, b) => a - b)
+                  )}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                    isBlocked
+                      ? 'bg-red-100 text-red-700 border-red-300 line-through'
+                      : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100'
+                  }`}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+          {blockedHours.length > 0 && (
+            <p className="text-xs text-red-600">
+              Se omitirán: {blockedHours.map(h => `${h}:00`).join(', ')}
+              {' '}· <button type="button" onClick={() => setBlockedHours([])} className="underline">limpiar</button>
+            </p>
+          )}
         </div>
       </div>
 

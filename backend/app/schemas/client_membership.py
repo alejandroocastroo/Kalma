@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -26,15 +26,41 @@ class ClientMembershipUpdate(BaseModel):
     preferred_space_id: Optional[uuid.UUID] = None
 
 
+class MakeupSessionResponse(BaseModel):
+    id: uuid.UUID
+    membership_id: uuid.UUID
+    client_id: uuid.UUID
+    original_date: date
+    makeup_date: Optional[date] = None
+    class_session_id: Optional[uuid.UUID] = None
+    status: str
+    notes: Optional[str] = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ClientMembershipResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
     client_id: uuid.UUID
     plan_id: uuid.UUID
+    # v2 fields
+    membership_type: str = "monthly"
+    billing_day: Optional[int] = None
+    next_billing_date: Optional[date] = None
+    sessions_per_week: Optional[int] = None
+    total_sessions: Optional[int] = None
+    sessions_used: int = 0
+    scheduled_days: Optional[List[str]] = None
+    expiry_date: Optional[date] = None
+    makeups_allowed: int = 1
+    makeups_used: int = 0
+    makeup_sessions: List[MakeupSessionResponse] = []
+    # legacy fields
     start_date: date
     end_date: Optional[date] = None
     status: str
-    makeup_credits: int
+    makeup_credits: int = 0
     notes: Optional[str] = None
     preferred_days: Optional[list[int]] = None
     preferred_hour: Optional[int] = None

@@ -1,0 +1,2 @@
+ALTER TABLE plans
+  ADD COLUMN IF NOT EXISTS space_id UUID REFERENCES spaces(id);

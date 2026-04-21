@@ -93,6 +93,7 @@ export interface Appointment {
   client_id: string
   status: AppointmentStatus
   paid: boolean
+  is_debt: boolean
   payment_amount?: number
   payment_method?: string
   whatsapp_confirmation_sent: boolean
@@ -246,32 +247,88 @@ export interface Plan {
   id: string
   tenant_id: string
   name: string
-  description?: string
+  description: string | null
   price_cop: number
   classes_per_week: number
   is_active: boolean
+  membership_type: 'monthly' | 'session_based'
+  sessions_per_week: number | null
+  total_sessions: number | null
+  space_id: string | null
+  space_name: string | null
   created_at: string
 }
 
+export interface MembershipsListResponse {
+  items: ClientMembership[]
+  total: number
+  page: number
+  pages: number
+}
+
+export interface MakeupSessionRecord {
+  id: string;
+  membership_id: string;
+  client_id: string;
+  original_date: string; // ISO date
+  makeup_date: string | null;
+  class_session_id: string | null;
+  status: 'pending' | 'completed' | 'cancelled';
+  notes: string | null;
+  created_at: string;
+}
+
 export interface ClientMembership {
-  id: string
-  tenant_id: string
-  client_id: string
-  plan_id: string
-  start_date: string
-  end_date?: string
-  status: 'active' | 'paused' | 'cancelled'
-  makeup_credits: number
-  notes?: string
-  created_at: string
-  client_name?: string
-  plan_name?: string
-  plan_classes_per_week?: number
-  plan_price_cop?: number
-  preferred_days?: number[]       // [0,2,4] → lun=0, mar=1, mié=2, jue=3, vie=4, sáb=5, dom=6
-  preferred_hour?: number         // 0-23
-  preferred_space_id?: string
-  preferred_space_name?: string
+  id: string;
+  tenant_id: string;
+  client_id: string;
+  plan_id: string;
+  membership_type: 'monthly' | 'session_based';
+  start_date: string;
+  end_date: string | null;
+  status: 'active' | 'paused' | 'cancelled';
+  billing_day: number | null;
+  next_billing_date: string | null;
+  sessions_per_week: number | null;
+  total_sessions: number | null;
+  sessions_used: number;
+  sessions_remaining: number | null;
+  scheduled_days: string[] | null; // ["monday", "tuesday"]
+  expiry_date: string | null;
+  makeups_allowed: number;
+  makeups_used: number;
+  makeup_credits: number;
+  notes: string | null;
+  preferred_days: number[] | null;
+  preferred_hour: number | null;
+  preferred_space_id: string | null;
+  makeup_sessions: MakeupSessionRecord[];
+  created_at: string;
+  updated_at: string;
+  // Legacy / joined fields kept for backward compatibility
+  client_name?: string;
+  plan_name?: string;
+  plan_classes_per_week?: number;
+  plan_price_cop?: number;
+  preferred_space_name?: string;
+}
+
+export interface CobrosClient {
+  client_id: string;
+  client_name: string;
+  plan_name: string | null;
+  membership_type: 'monthly' | 'session_based' | null;
+  priority: 1 | 2 | 3 | 4;
+  status_label: string;
+  next_billing_date: string | null;
+  expiry_date: string | null;
+  sessions_remaining: number | null;
+  sessions_used: number | null;
+  total_sessions: number | null;
+  has_pending_makeup: boolean;
+  membership_id: string | null;
+  debt_count: number;
+  appointment_ids_with_debt: string[];
 }
 
 export interface AutoBookResult {

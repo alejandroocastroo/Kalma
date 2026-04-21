@@ -13,6 +13,7 @@ class AppointmentCreate(BaseModel):
     payment_amount: Optional[Decimal] = None
     payment_method: Optional[str] = None
     notes: Optional[str] = None
+    is_debt: bool = False
 
 
 class AppointmentUpdate(BaseModel):
@@ -35,6 +36,7 @@ class AppointmentResponse(BaseModel):
     whatsapp_confirmation_sent: bool
     whatsapp_reminder_sent: bool
     notes: Optional[str] = None
+    is_debt: bool = False
     # Campos enriquecidos
     client_name: Optional[str] = None
     client_phone: Optional[str] = None

@@ -292,7 +292,11 @@ async def generate_sessions(
         dates_processed += 1
 
         # close_hour is inclusive: last session STARTS at close_hour
+        blocked = set(body.blocked_hours or [])
         for hour in range(open_hour, close_hour + 1):
+            if hour in blocked:
+                skipped += 1
+                continue
             key = (current_date, hour, space_uuid)
             if key in existing_sessions:
                 skipped += 1

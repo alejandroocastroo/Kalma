@@ -24,6 +24,7 @@ class Appointment(Base, TimestampMixin):
     whatsapp_confirmation_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     whatsapp_reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_debt: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     class_session = relationship("ClassSession", back_populates="appointments", lazy="noload")
     client = relationship("Client", back_populates="appointments", lazy="noload")

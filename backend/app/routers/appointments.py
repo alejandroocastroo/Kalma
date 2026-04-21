@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from typing import Optional
 
 from app.database import get_db
@@ -177,3 +177,23 @@ async def confirm_whatsapp(appt_id: str, db: AsyncSession = Depends(get_db), cur
     appt.whatsapp_confirmation_sent = True
     await db.commit()
     return {"message": "Confirmación WhatsApp enviada (placeholder)"}
+
+
+@router.put("/{appt_id}/mark-paid")
+async def mark_appointment_paid(
+    appt_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    result = await db.execute(
+        select(Appointment).where(
+            and_(Appointment.id == appt_id, Appointment.tenant_id == current_user.tenant_id)
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if not appt:
+        raise HTTPException(status_code=404, detail="Cita no encontrada")
+    appt.paid = True
+    appt.is_debt = False
+    await db.commit()
+    return {"ok": True}
