@@ -171,7 +171,9 @@ async def list_memberships(
     )
     if client_id:
         q = q.where(ClientMembership.client_id == uuid.UUID(client_id))
-    if status:
+    if status == 'not_cancelled':
+        q = q.where(ClientMembership.status != 'cancelled')
+    elif status:
         q = q.where(ClientMembership.status == status)
     if search:
         q = q.where(Client.full_name.ilike(f"%{search}%"))

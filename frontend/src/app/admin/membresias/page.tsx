@@ -350,7 +350,7 @@ export default function MembresiasPage() {
   const { data: membershipsData, isLoading } = useQuery({
     queryKey: ['memberships', statusFilter, search, spaceFilter, page],
     queryFn: () => memberships.list({
-      status: statusFilter !== 'all' ? statusFilter : undefined,
+      status: statusFilter !== 'all' ? statusFilter : 'not_cancelled',
       search: search || undefined,
       space_id: spaceFilter || undefined,
       page,
