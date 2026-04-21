@@ -67,40 +67,19 @@ async def get_cobros(
                 Client.is_active == True,
             )
         )
-        # Keep only the most-recent membership per client by ordering before
-        # the dedup below
         .order_by(ClientMembership.client_id, ClientMembership.created_at.desc())
     )
     mem_rows = mem_result.all()
 
-    # Dedup: one row per client (most recent membership wins, already ordered)
+    # Dedup: one row per client (most recent membership wins)
     seen_clients: dict[uuid.UUID, tuple] = {}
     for membership, plan, client in mem_rows:
         if client.id not in seen_clients:
             seen_clients[client.id] = (membership, plan, client)
 
     # ------------------------------------------------------------------ #
-    # 2. Debt counts + appointment IDs per client (all tenants filtered)
+    # 2. Single query for all debt appointment IDs (replaces two queries)
     # ------------------------------------------------------------------ #
-    debt_count_result = await db.execute(
-        select(
-            Appointment.client_id,
-            func.count(Appointment.id).label("debt_count"),
-        )
-        .where(
-            and_(
-                Appointment.tenant_id == tenant_id,
-                Appointment.is_debt == True,
-                Appointment.paid == False,
-            )
-        )
-        .group_by(Appointment.client_id)
-    )
-    debt_counts: dict[uuid.UUID, int] = {
-        row.client_id: row.debt_count for row in debt_count_result.all()
-    }
-
-    # Fetch all debt appointment IDs per client in a single query
     debt_ids_result = await db.execute(
         select(Appointment.client_id, Appointment.id)
         .where(
@@ -116,46 +95,55 @@ async def get_cobros(
         debt_ids_map.setdefault(client_id, []).append(appt_id)
 
     # ------------------------------------------------------------------ #
-    # 3. Build cobros list
+    # 3. Single batch query for all pending makeups
     # ------------------------------------------------------------------ #
-    cobros: list[CobrosClientResponse] = []
-    clients_with_membership: set[uuid.UUID] = set()
-
-    for client_id, (membership, plan, client) in seen_clients.items():
-        clients_with_membership.add(client_id)
-
-        priority = get_cobros_priority(membership, today)
-
-        # Check pending makeups
-        has_pending_makeup = False
-        makeup_result = await db.execute(
-            select(MakeupSession).where(
+    membership_ids = [m.id for m, _, _ in seen_clients.values()]
+    if membership_ids:
+        pending_makeup_result = await db.execute(
+            select(MakeupSession.membership_id)
+            .where(
                 and_(
-                    MakeupSession.membership_id == membership.id,
+                    MakeupSession.membership_id.in_(membership_ids),
                     MakeupSession.status == "pending",
                 )
             )
+            .distinct()
         )
-        has_pending_makeup = makeup_result.first() is not None
+        memberships_with_pending_makeup: set[uuid.UUID] = set(pending_makeup_result.scalars().all())
+    else:
+        memberships_with_pending_makeup = set()
+
+    # ------------------------------------------------------------------ #
+    # 4. Batch-fetch clients with debt but NO active membership
+    # ------------------------------------------------------------------ #
+    no_membership_client_ids = [
+        cid for cid in debt_ids_map if cid not in seen_clients
+    ]
+    no_membership_clients: dict[uuid.UUID, Client] = {}
+    if no_membership_client_ids:
+        client_rows_result = await db.execute(
+            select(Client).where(
+                Client.id.in_(no_membership_client_ids),
+                Client.is_active == True,
+            )
+        )
+        no_membership_clients = {c.id: c for c in client_rows_result.scalars().all()}
+
+    # ------------------------------------------------------------------ #
+    # 5. Build cobros list
+    # ------------------------------------------------------------------ #
+    cobros: list[CobrosClientResponse] = []
+
+    for client_id, (membership, plan, client) in seen_clients.items():
+        priority = get_cobros_priority(membership, today)
+        has_pending_makeup = membership.id in memberships_with_pending_makeup
 
         sessions_remaining = None
         if membership.total_sessions is not None:
             sessions_remaining = membership.total_sessions - (membership.sessions_used or 0)
 
-        plan_name = None
-        if plan and membership:
-            if membership.membership_type == "monthly":
-                plan_name = "Mensualidad"
-            elif membership.sessions_per_week == 2:
-                plan_name = "2x semana"
-            elif membership.sessions_per_week == 3:
-                plan_name = "3x semana"
-            elif membership.sessions_per_week == 5:
-                plan_name = "5x semana"
-            else:
-                plan_name = plan.name
-
-        d_count = debt_counts.get(client_id, 0)
+        plan_name = plan.name if plan else None
+        d_count = len(debt_ids_map.get(client_id, []))
         d_ids = debt_ids_map.get(client_id, [])
 
         cobros.append(
@@ -178,20 +166,10 @@ async def get_cobros(
             )
         )
 
-    # ------------------------------------------------------------------ #
-    # 4. Clients with debt but NO active membership
-    # ------------------------------------------------------------------ #
-    for client_id, d_count in debt_counts.items():
-        if client_id in clients_with_membership:
-            continue  # already included above
-
-        # Fetch client row
-        client_row = await db.get(Client, client_id)
-        if not client_row or not client_row.is_active:
-            continue
-
+    # Clients with debt but NO active membership
+    for client_id, client_row in no_membership_clients.items():
+        d_count = len(debt_ids_map.get(client_id, []))
         d_ids = debt_ids_map.get(client_id, [])
-
         cobros.append(
             CobrosClientResponse(
                 client_id=client_row.id,
@@ -213,7 +191,7 @@ async def get_cobros(
         )
 
     # ------------------------------------------------------------------ #
-    # 5. Sort: priority asc, then secondary sort
+    # 6. Sort: priority asc, then secondary sort
     # ------------------------------------------------------------------ #
     def sort_key(c: CobrosClientResponse):
         secondary = 0

@@ -17,7 +17,7 @@ router = APIRouter(prefix="/clients", tags=["Clientes"])
 
 @router.get("", response_model=PaginatedResponse[ClientResponse])
 async def list_clients(
-    search: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=100),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),

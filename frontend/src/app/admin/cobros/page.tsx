@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { apiClient } from '@/lib/api';
+import { cobros as cobrosApi, apiClient } from '@/lib/api';
 import type { CobrosClient } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -24,10 +24,8 @@ export default function CobrosPage() {
 
   const { data: cobros = [], isLoading, refetch } = useQuery<CobrosClient[]>({
     queryKey: ['cobros'],
-    queryFn: async () => {
-      const res = await apiClient.get('/cobros');
-      return res.data;
-    },
+    queryFn: cobrosApi.list,
+    staleTime: 2 * 60 * 1000,
   });
 
   const handleMarkPaid = async (appointmentIds: string[]) => {

@@ -82,6 +82,17 @@ export const saveAuthData = (data: TokenResponse) => {
 }
 
 export const logout = () => {
+  const refreshToken = getRefreshToken()
+
+  // Revoke refresh token server-side (fire-and-forget)
+  if (refreshToken) {
+    fetch('/api/v1/auth/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    }).catch(() => {})
+  }
+
   removeToken()
   removeRefreshToken()
   removeTenantSlug()

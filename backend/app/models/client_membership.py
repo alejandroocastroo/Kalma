@@ -1,6 +1,6 @@
 import uuid
 from datetime import date
-from sqlalchemy import String, Text, Integer, SmallInteger, Date, ForeignKey, JSON
+from sqlalchemy import String, Text, Integer, SmallInteger, Date, ForeignKey, JSON, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
@@ -9,6 +9,9 @@ from app.models.base import TimestampMixin
 
 class ClientMembership(Base, TimestampMixin):
     __tablename__ = "client_memberships"
+    __table_args__ = (
+        Index("ix_client_memberships_tenant_status", "tenant_id", "status"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, index=True)

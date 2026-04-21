@@ -16,6 +16,7 @@ psql "$DB_URL" -f migrations/add_membership_schedule.sql
 psql "$DB_URL" -f migrations/add_cobros_v2.sql
 psql "$DB_URL" -f migrations/add_appointment_debt.sql
 psql "$DB_URL" -f migrations/add_plan_space.sql
+psql "$DB_URL" -f migrations/add_performance_indexes.sql
 
 echo "==> Running seed..."
 python seed.py

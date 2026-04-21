@@ -1,6 +1,6 @@
 import uuid
 from decimal import Decimal
-from sqlalchemy import String, Text, Boolean, Numeric, ForeignKey, UniqueConstraint
+from sqlalchemy import String, Text, Boolean, Numeric, ForeignKey, UniqueConstraint, Index, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.database import Base
@@ -11,6 +11,12 @@ class Appointment(Base, TimestampMixin):
     __tablename__ = "appointments"
     __table_args__ = (
         UniqueConstraint("class_session_id", "client_id", name="uq_appointment_session_client"),
+        # Partial index: only indexes unpaid debt rows — keeps the index tiny
+        Index(
+            "ix_appointments_debt_unpaid",
+            "tenant_id", "client_id",
+            postgresql_where=text("is_debt = TRUE AND paid = FALSE"),
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

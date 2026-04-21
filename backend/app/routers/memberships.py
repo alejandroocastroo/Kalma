@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, and_
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
@@ -70,19 +71,16 @@ class MembershipCreateV2(BaseModel):
 # Helper
 # ---------------------------------------------------------------------------
 
-async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
+def _enrich_loaded(m: ClientMembership) -> dict:
+    """Sync enrichment — requires relationships already loaded via selectinload."""
     data = ClientMembershipResponse.model_validate(m).model_dump()
-    client = await db.get(Client, m.client_id)
-    plan = await db.get(Plan, m.plan_id)
+    client = m.client
+    plan = m.plan
     data["client_name"] = client.full_name if client else None
     data["plan_name"] = plan.name if plan else None
-    data["plan_classes_per_week"] = plan.classes_per_week if plan else None
-    data["plan_price_cop"] = plan.price_cop if plan else None
-    if m.preferred_space_id:
-        from app.models.space import Space
-        space = await db.get(Space, m.preferred_space_id)
-        data["preferred_space_name"] = space.name if space else None
-    # v2 extra fields
+    data["plan_classes_per_week"] = getattr(plan, "classes_per_week", None) if plan else None
+    data["plan_price_cop"] = getattr(plan, "price_cop", None) if plan else None
+    data["preferred_space_name"] = m.preferred_space.name if m.preferred_space else None
     data["membership_type"] = m.membership_type
     data["billing_day"] = m.billing_day
     data["next_billing_date"] = m.next_billing_date
@@ -93,18 +91,51 @@ async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
     data["expiry_date"] = m.expiry_date
     data["makeups_allowed"] = m.makeups_allowed
     data["makeups_used"] = m.makeups_used
-    if m.total_sessions is not None:
-        data["sessions_remaining"] = m.total_sessions - (m.sessions_used or 0)
-    else:
-        data["sessions_remaining"] = None
-    # load makeup sessions
+    data["sessions_remaining"] = (
+        m.total_sessions - (m.sessions_used or 0) if m.total_sessions is not None else None
+    )
+    data["makeup_sessions"] = [
+        MakeupSessionResponse.model_validate(mu).model_dump()
+        for mu in sorted(m.makeup_sessions, key=lambda x: x.created_at, reverse=True)
+    ]
+    return data
+
+
+async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
+    """Async enrichment — used after individual writes where relationships aren't pre-loaded."""
+    from app.models.space import Space
+    await db.refresh(m)
+    client = await db.get(Client, m.client_id)
+    plan = await db.get(Plan, m.plan_id)
+    space = await db.get(Space, m.preferred_space_id) if m.preferred_space_id else None
     mu_result = await db.execute(
         select(MakeupSession)
         .where(MakeupSession.membership_id == m.id)
         .order_by(MakeupSession.created_at.desc())
     )
+    makeups = mu_result.scalars().all()
+
+    data = ClientMembershipResponse.model_validate(m).model_dump()
+    data["client_name"] = client.full_name if client else None
+    data["plan_name"] = plan.name if plan else None
+    data["plan_classes_per_week"] = getattr(plan, "classes_per_week", None) if plan else None
+    data["plan_price_cop"] = getattr(plan, "price_cop", None) if plan else None
+    data["preferred_space_name"] = space.name if space else None
+    data["membership_type"] = m.membership_type
+    data["billing_day"] = m.billing_day
+    data["next_billing_date"] = m.next_billing_date
+    data["sessions_per_week"] = m.sessions_per_week
+    data["total_sessions"] = m.total_sessions
+    data["sessions_used"] = m.sessions_used
+    data["scheduled_days"] = m.scheduled_days
+    data["expiry_date"] = m.expiry_date
+    data["makeups_allowed"] = m.makeups_allowed
+    data["makeups_used"] = m.makeups_used
+    data["sessions_remaining"] = (
+        m.total_sessions - (m.sessions_used or 0) if m.total_sessions is not None else None
+    )
     data["makeup_sessions"] = [
-        MakeupSessionResponse.model_validate(mu).model_dump() for mu in mu_result.scalars().all()
+        MakeupSessionResponse.model_validate(mu).model_dump() for mu in makeups
     ]
     return data
 
@@ -156,39 +187,52 @@ async def auto_deduct(
 async def list_memberships(
     client_id: Optional[str] = None,
     status: Optional[str] = None,
-    search: Optional[str] = None,
+    search: Optional[str] = Query(None, max_length=100),
     space_id: Optional[str] = None,
-    page: int = 1,
-    limit: int = 20,
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    q = (
+    # Build base filtered query (without options — for count)
+    base_q = (
         select(ClientMembership)
         .join(Client, ClientMembership.client_id == Client.id)
         .join(Plan, ClientMembership.plan_id == Plan.id, isouter=True)
         .where(ClientMembership.tenant_id == current_user.tenant_id)
     )
     if client_id:
-        q = q.where(ClientMembership.client_id == uuid.UUID(client_id))
+        base_q = base_q.where(ClientMembership.client_id == uuid.UUID(client_id))
     if status == 'not_cancelled':
-        q = q.where(ClientMembership.status != 'cancelled')
+        base_q = base_q.where(ClientMembership.status != 'cancelled')
     elif status:
-        q = q.where(ClientMembership.status == status)
+        base_q = base_q.where(ClientMembership.status == status)
     if search:
-        q = q.where(Client.full_name.ilike(f"%{search}%"))
+        base_q = base_q.where(Client.full_name.ilike(f"%{search}%"))
     if space_id:
-        q = q.where(Plan.space_id == uuid.UUID(space_id))
+        base_q = base_q.where(Plan.space_id == uuid.UUID(space_id))
 
-    # Total count
-    count_q = select(func.count()).select_from(q.subquery())
+    # Count
+    count_q = select(func.count()).select_from(base_q.subquery())
     total = (await db.execute(count_q)).scalar() or 0
 
-    q = q.order_by(ClientMembership.created_at.desc()).offset((page - 1) * limit).limit(limit)
-    result = await db.execute(q)
-    items = result.scalars().all()
+    # Data query with eager loading (5 queries total: 1 main + 4 selectinload batches)
+    data_q = (
+        base_q
+        .options(
+            selectinload(ClientMembership.client),
+            selectinload(ClientMembership.plan),
+            selectinload(ClientMembership.preferred_space),
+            selectinload(ClientMembership.makeup_sessions),
+        )
+        .order_by(ClientMembership.created_at.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+    )
+    result = await db.execute(data_q)
+    items = result.scalars().unique().all()
     return {
-        "items": [await _enrich(m, db) for m in items],
+        "items": [_enrich_loaded(m) for m in items],
         "total": total,
         "page": page,
         "pages": max(1, (total + limit - 1) // limit),

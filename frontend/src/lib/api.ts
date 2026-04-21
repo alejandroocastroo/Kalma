@@ -4,7 +4,7 @@ import type {
   LoginRequest, TokenResponse, ClassType, ClassSession, Client,
   Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession,
   Space, SlotAvailability, RevenueReport, OccupancyReport,
-  Plan, ClientMembership, MembershipsListResponse, WeeklyStats, AutoBookResult
+  Plan, ClientMembership, MembershipsListResponse, WeeklyStats, AutoBookResult, CobrosClient
 } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -242,6 +242,11 @@ export const memberships = {
     apiClient.post(`/memberships/${membershipId}/makeups`, data).then(r => r.data),
   listMakeups: (membershipId: string) =>
     apiClient.get(`/memberships/${membershipId}/makeups`).then(r => r.data),
+}
+
+// ── Cobros ────────────────────────────────────────────────────
+export const cobros = {
+  list: () => apiClient.get<CobrosClient[]>('/cobros').then(r => r.data),
 }
 
 // ── Public (no auth) ──────────────────────────────────────────

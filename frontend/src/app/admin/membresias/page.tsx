@@ -342,9 +342,15 @@ export default function MembresiasPage() {
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
   const [selectedClientName, setSelectedClientName] = useState('')
 
-  // Auto-deduct on mount (silent)
+  // Auto-deduct on mount — throttled to once every 10 min to avoid DB writes on every visit
   useEffect(() => {
-    memberships.autoDeduct().catch(e => console.log('auto-deduct error:', e))
+    const THROTTLE_KEY = 'kalma_autodeduct_last'
+    const THROTTLE_MS = 10 * 60 * 1000
+    const last = Number(localStorage.getItem(THROTTLE_KEY) || 0)
+    if (Date.now() - last < THROTTLE_MS) return
+    memberships.autoDeduct()
+      .then(() => localStorage.setItem(THROTTLE_KEY, String(Date.now())))
+      .catch(() => {})
   }, [])
 
   const { data: membershipsData, isLoading } = useQuery({
@@ -402,7 +408,10 @@ export default function MembresiasPage() {
         toast.success('Horario guardado. No hay sesiones creadas aún para esos días/hora este mes.')
       }
     },
-    onError: () => {},
+    onError: (e: unknown) => {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      toast.error(detail || 'No se pudo agendar automáticamente. Verifica el horario configurado.')
+    },
   })
 
   const createMutation = useMutation({
