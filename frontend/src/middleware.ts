@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/login', '/api/', '/_next/', '/favicon.ico']
+const PUBLIC_PATHS = ['/', '/login', '/api/', '/_next/', '/favicon.ico', '/screenshots/']
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
