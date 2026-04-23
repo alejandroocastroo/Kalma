@@ -11,7 +11,8 @@
       "Bash(ls:*)",
       "Bash(npx tsc:*)",
       "Skill(update-config)",
-      "Bash(docker restart:*)"
+      "Bash(docker restart:*)",
+      "Bash(claude doctor *)"
     ],
     "deny": [
       "Bash(git commit*)",
