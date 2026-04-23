@@ -5,7 +5,8 @@ echo "==> Running Alembic migrations..."
 alembic upgrade head
 
 echo "==> Running SQL migrations..."
-DB_URL="postgresql://kalma:kalmapassword@db:5432/kalma"
+DB_URL="${DATABASE_URL/+asyncpg/}"
+set +e
 psql "$DB_URL" -f migrations/add_spaces.sql
 psql "$DB_URL" -f migrations/add_schedule.sql
 psql "$DB_URL" -f migrations/make_class_type_optional.sql
@@ -17,9 +18,10 @@ psql "$DB_URL" -f migrations/add_cobros_v2.sql
 psql "$DB_URL" -f migrations/add_appointment_debt.sql
 psql "$DB_URL" -f migrations/add_plan_space.sql
 psql "$DB_URL" -f migrations/add_performance_indexes.sql
+set -e
 
 echo "==> Running seed..."
 python seed.py
 
 echo "==> Starting server..."
-exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+exec uvicorn app.main:app --host 0.0.0.0 --port 8000
