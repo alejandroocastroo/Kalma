@@ -63,6 +63,7 @@ export interface ClassSession {
   class_type_name?: string
   class_type_color?: string
   instructor_name?: string
+  space_id?: string
   space_name?: string
   created_at: string
 }
