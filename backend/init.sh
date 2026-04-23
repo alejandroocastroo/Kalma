@@ -5,19 +5,22 @@ echo "==> Running Alembic migrations..."
 alembic upgrade head
 
 echo "==> Running SQL migrations..."
-DB_URL="${DATABASE_URL/+asyncpg/}"
+export PGPASSWORD="${POSTGRES_PASSWORD:-kalmapassword}"
+PG_HOST="db"
+PG_USER="${POSTGRES_USER:-kalma}"
+PG_DB="${POSTGRES_DB:-kalma}"
 set +e
-psql "$DB_URL" -f migrations/add_spaces.sql
-psql "$DB_URL" -f migrations/add_schedule.sql
-psql "$DB_URL" -f migrations/make_class_type_optional.sql
-psql "$DB_URL" -f migrations/add_space_to_payments.sql
-psql "$DB_URL" -f migrations/add_session_custom_name.sql
-psql "$DB_URL" -f migrations/add_plans_memberships.sql
-psql "$DB_URL" -f migrations/add_membership_schedule.sql
-psql "$DB_URL" -f migrations/add_cobros_v2.sql
-psql "$DB_URL" -f migrations/add_appointment_debt.sql
-psql "$DB_URL" -f migrations/add_plan_space.sql
-psql "$DB_URL" -f migrations/add_performance_indexes.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_spaces.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_schedule.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/make_class_type_optional.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_space_to_payments.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_session_custom_name.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_plans_memberships.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_membership_schedule.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_cobros_v2.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_appointment_debt.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_plan_space.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_performance_indexes.sql
 set -e
 
 echo "==> Running seed..."

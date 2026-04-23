@@ -53,6 +53,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-super-secret-key-change-in-production-min-32-chars}
       ENVIRONMENT: ${ENVIRONMENT:-development}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:8080}
+      POSTGRES_USER: ${POSTGRES_USER:-kalma}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-kalmapassword}
+      POSTGRES_DB: ${POSTGRES_DB:-kalma}
     depends_on:
       db:
         condition: service_healthy
