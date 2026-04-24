@@ -12,8 +12,34 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
+const RESERVED_SUBDOMAINS = ['www', 'api', 'app']
+
+function getTenantSlugFromHost(host: string): string | null {
+  const parts = host.split('.')
+  if (parts.length >= 3 && host.includes('usekalma.com')) {
+    const sub = parts[0]
+    if (!RESERVED_SUBDOMAINS.includes(sub)) return sub
+  }
+  return null
+}
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
+  const host = request.headers.get('host') || ''
+  const tenantSlug = getTenantSlugFromHost(host)
+
+  // Subdomain rewrite: mantra.usekalma.com → /mantra
+  if (tenantSlug) {
+    if (pathname === '/') {
+      return NextResponse.rewrite(new URL(`/${tenantSlug}`, request.url))
+    }
+    // /login on subdomain → pass slug as cookie so login page can use it
+    if (pathname === '/login') {
+      const res = NextResponse.next()
+      res.cookies.set('kalma_tenant_hint', tenantSlug, { path: '/', sameSite: 'lax' })
+      return res
+    }
+  }
 
   // Allow public paths
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
