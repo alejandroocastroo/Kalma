@@ -12,7 +12,8 @@
       "Bash(npx tsc:*)",
       "Skill(update-config)",
       "Bash(docker restart:*)",
-      "Bash(claude doctor *)"
+      "Bash(claude doctor *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
     ],
     "deny": [
       "Bash(git commit*)",
