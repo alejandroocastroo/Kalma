@@ -23,8 +23,12 @@ psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_plan_space.sql
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_performance_indexes.sql
 set -e
 
-echo "==> Running seed..."
-python seed.py
+if [ "${ENVIRONMENT}" = "development" ]; then
+  echo "==> Running seed (development only)..."
+  python seed.py
+else
+  echo "==> Skipping seed (production)"
+fi
 
 echo "==> Starting server..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000
