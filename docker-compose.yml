@@ -85,6 +85,11 @@ services:
       - backend
     networks:
       - kalma_net
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1G
 
   # ─────────────────────────────────────────
   # Nginx (reverse proxy)
