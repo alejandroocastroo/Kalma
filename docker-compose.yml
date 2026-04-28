@@ -61,10 +61,10 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    volumes:
-      - ./backend:/app
     networks:
       - kalma_net
+    security_opt:
+      - no-new-privileges:true
     command: bash init.sh
 
   # ─────────────────────────────────────────
@@ -85,6 +85,8 @@ services:
       - backend
     networks:
       - kalma_net
+    security_opt:
+      - no-new-privileges:true
     deploy:
       resources:
         limits:

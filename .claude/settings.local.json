@@ -13,7 +13,8 @@
       "Skill(update-config)",
       "Bash(docker restart:*)",
       "Bash(claude doctor *)",
-      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); pkgs=d.get\\('packages',{}\\); print\\('next:', pkgs.get\\('node_modules/next',{}\\).get\\('version'\\)\\); print\\('axios:', pkgs.get\\('node_modules/axios',{}\\).get\\('version'\\)\\)\")"
     ],
     "deny": [
       "Bash(git commit*)",
