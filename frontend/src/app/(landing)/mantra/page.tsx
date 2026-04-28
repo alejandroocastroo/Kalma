@@ -6,6 +6,7 @@ import { Users, MapPin, Phone, Instagram, MessageCircle, Facebook } from 'lucide
 import { BookingWidget } from '@/components/landing/booking-widget'
 import { ClassesCarousel } from '@/components/landing/classes-carousel'
 import { formatCOP } from '@/lib/utils'
+import type { PublicSession } from '@/types'
 
 const cormorant = Cormorant_Garamond({
   subsets: ['latin'],
@@ -20,14 +21,7 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ||
   'http://localhost:8000'
 
-interface Session {
-  id: string
-  start_datetime: string
-  available_spots: number
-  class_type: { name: string; color: string; price: number }
-}
-
-async function getMantraSchedule(): Promise<Session[]> {
+async function getMantraSchedule(): Promise<PublicSession[]> {
   try {
     const res = await fetch(`${API_URL}/api/v1/public/mantra/schedule`, {
       next: { revalidate: 300 },
@@ -147,7 +141,7 @@ const TikTokIcon = () => (
 // ─── PAGE ────────────────────────────────────────────────────────────────────
 
 export default async function MantraLandingPage() {
-  const schedule = await getMantraSchedule()
+  const schedule: PublicSession[] = await getMantraSchedule()
 
   return (
     <div className="min-h-screen bg-white font-sans">
