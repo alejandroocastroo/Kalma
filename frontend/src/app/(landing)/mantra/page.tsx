@@ -217,7 +217,7 @@ export default async function MantraLandingPage() {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
             {[
               { num: '01', title: 'Intención en cada clase', desc: 'Cada sesión está diseñada para conectar cuerpo y mente desde adentro hacia afuera.' },
-              { num: '02', title: 'Grupos pequeños', desc: 'Atención personalizada. Máximo 12 personas por sesión para garantizar tu progreso.' },
+              { num: '02', title: 'Grupos pequeños', desc: 'Atención personalizada. Máximo 3 personas por sesión para garantizar tu progreso.' },
               { num: '03', title: 'Hábitos sostenibles', desc: 'Construimos rutinas de movimiento que permanecen en el tiempo y transforman tu vida diaria.' },
             ].map(({ num, title, desc }) => (
               <div key={num}>
