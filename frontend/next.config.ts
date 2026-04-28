@@ -2,6 +2,15 @@ import type { NextConfig } from 'next'
 
 const config: NextConfig = {
   output: 'standalone',
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        'usekalma.com',
+        '*.usekalma.com',
+        'mantra.usekalma.com',
+      ],
+    },
+  },
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
