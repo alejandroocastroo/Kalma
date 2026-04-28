@@ -1,7 +1,17 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 
-const PUBLIC_PATHS = ['/', '/login', '/api/', '/_next/', '/favicon.ico', '/screenshots/']
+const PUBLIC_PATHS = ['/login', '/api/', '/_next/', '/favicon.ico', '/screenshots/']
+const RESERVED_SUBDOMAINS = ['www', 'api', 'app']
+
+function getTenantSlug(host: string): string | null {
+  const parts = host.split('.')
+  if (parts.length >= 3 && host.includes('usekalma.com')) {
+    const sub = parts[0]
+    if (!RESERVED_SUBDOMAINS.includes(sub)) return sub
+  }
+  return null
+}
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
@@ -12,58 +22,49 @@ function decodeJwtPayload(token: string): Record<string, unknown> | null {
   }
 }
 
-const RESERVED_SUBDOMAINS = ['www', 'api', 'app']
-
-function getTenantSlugFromHost(host: string): string | null {
-  const parts = host.split('.')
-  if (parts.length >= 3 && host.includes('usekalma.com')) {
-    const sub = parts[0]
-    if (!RESERVED_SUBDOMAINS.includes(sub)) return sub
-  }
-  return null
-}
-
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
   const host = request.headers.get('host') || ''
-  const tenantSlug = getTenantSlugFromHost(host)
+  const tenantSlug = getTenantSlug(host)
 
-  // Subdomain rewrite: mantra.usekalma.com → /mantra
+  // ── Subdomain routing ──────────────────────────────────────
   if (tenantSlug) {
+    // Raíz del subdominio → la landing del tenant
     if (pathname === '/') {
       return NextResponse.rewrite(new URL(`/${tenantSlug}`, request.url))
     }
-    // /login on subdomain → pass slug as cookie so login page can use it
+    // /login en subdominio → login normal con hint del tenant
     if (pathname === '/login') {
       const res = NextResponse.next()
       res.cookies.set('kalma_tenant_hint', tenantSlug, { path: '/', sameSite: 'lax' })
       return res
     }
+    // Rutas protegidas en subdominio → verificar token igual que en dominio principal
   }
 
-  // Allow public paths
+  // ── Rutas públicas ─────────────────────────────────────────
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next()
   }
 
-  // Landing pages are public
+  // ── Landing pages públicas ([slug]) ────────────────────────
   if (pathname.match(/^\/[a-z0-9-]+($|\/)/)) {
     const firstSegment = pathname.split('/')[1]
-    if (!['admin', 'login', 'superadmin'].includes(firstSegment)) {
+    if (!['admin', 'superadmin'].includes(firstSegment)) {
       return NextResponse.next()
     }
   }
 
   const token = request.cookies.get('kalma_token')?.value
 
-  // Protect /admin routes
+  // ── Proteger /admin ────────────────────────────────────────
   if (pathname.startsWith('/admin')) {
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
   }
 
-  // Protect /superadmin routes — require role claim
+  // ── Proteger /superadmin ───────────────────────────────────
   if (pathname.startsWith('/superadmin')) {
     if (!token) {
       return NextResponse.redirect(new URL('/login', request.url))
