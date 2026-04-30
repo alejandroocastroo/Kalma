@@ -10,11 +10,13 @@ interface Clase {
 
 interface Props {
   clases: Clase[]
+  fadeColor?: string
+  accentColor?: string
 }
 
 const SPEED = 0.6 // px por frame
 
-export function ClassesCarousel({ clases }: Props) {
+export function ClassesCarousel({ clases, fadeColor = 'white', accentColor }: Props) {
   const items = [...clases, ...clases] // duplicado para loop infinito
 
   const trackRef  = useRef<HTMLDivElement>(null)
@@ -86,9 +88,9 @@ export function ClassesCarousel({ clases }: Props) {
     >
       {/* Fades laterales */}
       <div className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
-        style={{ background: 'linear-gradient(to right, white, transparent)' }} />
+        style={{ background: `linear-gradient(to right, ${fadeColor}, transparent)` }} />
       <div className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none"
-        style={{ background: 'linear-gradient(to left, white, transparent)' }} />
+        style={{ background: `linear-gradient(to left, ${fadeColor}, transparent)` }} />
 
       {/* Track */}
       <div

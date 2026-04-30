@@ -356,6 +356,103 @@ export default async function MantraLandingPage() {
         </div>
       </section>
 
+      {/* ── PLANES Y PRECIOS ─────────────────────────────────────── */}
+      <section className="py-20 bg-stone-50">
+        <div className="px-6 md:px-16 max-w-5xl mx-auto">
+
+          <div className="mb-14">
+            <p className="uppercase tracking-[0.25em] text-xs text-stone-400 mb-2">Membresías</p>
+            <h2 className={`${cormorant.className} text-4xl font-light text-stone-900`}
+              style={{ letterSpacing: '0.02em' }}>
+              Planes y precios
+            </h2>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+            {/* Plan Respiración */}
+            <div className="bg-white border border-stone-200 p-8 flex flex-col">
+              <p className="uppercase tracking-[0.2em] text-xs text-stone-400 mb-1">Plan</p>
+              <p className={`${cormorant.className} text-2xl font-light text-stone-900 mb-6`}
+                style={{ letterSpacing: '0.03em' }}>
+                Respiración
+              </p>
+              <p className="text-xs text-stone-400 font-light mb-8">2 clases / semana</p>
+              <div className="mt-auto">
+                <p className="text-3xl font-light text-stone-900 tabular-nums mb-1">$180.000</p>
+                <p className="text-xs text-stone-400 font-light mb-8">COP / mes</p>
+                <a href="#reservar"
+                  className="block text-center text-xs font-medium tracking-[0.15em] uppercase py-3 bg-stone-100 text-stone-900 hover:bg-stone-200 transition-colors">
+                  Reservar ahora
+                </a>
+              </div>
+            </div>
+
+            {/* Plan Estabilidad */}
+            <div className="bg-white border border-stone-200 p-8 flex flex-col">
+              <p className="uppercase tracking-[0.2em] text-xs text-stone-400 mb-1">Plan</p>
+              <p className={`${cormorant.className} text-2xl font-light text-stone-900 mb-6`}
+                style={{ letterSpacing: '0.03em' }}>
+                Estabilidad
+              </p>
+              <p className="text-xs text-stone-400 font-light mb-8">3 clases / semana</p>
+              <div className="mt-auto">
+                <p className="text-3xl font-light text-stone-900 tabular-nums mb-1">$240.000</p>
+                <p className="text-xs text-stone-400 font-light mb-8">COP / mes</p>
+                <a href="#reservar"
+                  className="block text-center text-xs font-medium tracking-[0.15em] uppercase py-3 bg-stone-100 text-stone-900 hover:bg-stone-200 transition-colors">
+                  Reservar ahora
+                </a>
+              </div>
+            </div>
+
+            {/* Plan Disciplina — destacado */}
+            <div className="bg-stone-900 p-8 flex flex-col">
+              <p className="uppercase tracking-[0.2em] text-xs text-stone-500 mb-1">Plan</p>
+              <p className={`${cormorant.className} text-2xl font-light text-white mb-1`}
+                style={{ letterSpacing: '0.03em' }}>
+                Disciplina
+              </p>
+              <p className="uppercase tracking-[0.15em] text-xs text-stone-500 mb-6">Más popular</p>
+              <p className="text-xs text-stone-400 font-light mb-8">5 clases / semana</p>
+              <div className="mt-auto">
+                <p className="text-3xl font-light text-white tabular-nums mb-1">$340.000</p>
+                <p className="text-xs text-stone-500 font-light mb-8">COP / mes</p>
+                <a href="#reservar"
+                  className="block text-center text-xs font-medium tracking-[0.15em] uppercase py-3 bg-white text-stone-900 hover:bg-stone-100 transition-colors">
+                  Reservar ahora
+                </a>
+              </div>
+            </div>
+
+            {/* Plan Mantra — dúo */}
+            <div className="bg-white border border-stone-200 p-8 flex flex-col">
+              <p className="uppercase tracking-[0.2em] text-xs text-stone-400 mb-1">Plan</p>
+              <p className={`${cormorant.className} text-2xl font-light text-stone-900 mb-1`}
+                style={{ letterSpacing: '0.03em' }}>
+                Mantra
+              </p>
+              <p className="text-xs text-stone-400 font-light mb-6">Paquete para 2 personas</p>
+              <p className="text-xs text-stone-400 font-light mb-8">2 clases / semana c/u</p>
+              <div className="mt-auto">
+                <p className="text-3xl font-light text-stone-900 tabular-nums mb-1">$320.000</p>
+                <p className="text-xs text-stone-400 font-light mb-8">COP / mes</p>
+                <a href="#reservar"
+                  className="block text-center text-xs font-medium tracking-[0.15em] uppercase py-3 bg-stone-100 text-stone-900 hover:bg-stone-200 transition-colors">
+                  Reservar ahora
+                </a>
+              </div>
+            </div>
+
+          </div>
+
+          <p className="mt-8 text-xs text-stone-400 font-light text-center">
+            Todos los planes incluyen acceso a todas las modalidades del horario semanal. Sin permanencia mínima.
+          </p>
+
+        </div>
+      </section>
+
       {/* ── GALERÍA ──────────────────────────────────────────────── */}
       <section className="py-20 bg-white">
         <div className="px-6 md:px-16 max-w-5xl mx-auto mb-14">
@@ -425,7 +522,7 @@ export default async function MantraLandingPage() {
               Escoge tu horario y asegura tu lugar en minutos.
             </p>
           </div>
-          <BookingWidget slug="mantra" sessions={schedule} />
+          <BookingWidget slug="mantra" sessions={schedule} whatsappPhone="573113513135" studioName="Mantra Pilates Studio" />
         </div>
       </section>
 
