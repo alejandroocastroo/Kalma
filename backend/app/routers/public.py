@@ -10,6 +10,7 @@ from app.limiter import limiter
 from app.models.tenant import Tenant
 from app.models.class_type import ClassType
 from app.models.class_session import ClassSession
+from app.models.space import Space
 from app.models.client import Client
 from app.models.appointment import Appointment
 
@@ -65,6 +66,13 @@ async def studio_info(slug: str, db: AsyncSession = Depends(get_db)):
     }
 
 
+def _slug_match(space_name: str, slug: str) -> bool:
+    """True si el slug coincide con el nombre del espacio (sin espacios ni caracteres especiales)."""
+    import re
+    normalized = re.sub(r'[^a-z0-9]', '', space_name.lower())
+    return slug.lower() in normalized
+
+
 @router.get("/{slug}/schedule")
 async def public_schedule(
     slug: str,
@@ -72,12 +80,46 @@ async def public_schedule(
     end: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ):
+    # 1. Buscar tenant por slug directo
     result = await db.execute(
         select(Tenant).where(Tenant.slug == slug, Tenant.is_active == True)
     )
     tenant = result.scalar_one_or_none()
+
+    # 2. Si no hay tenant por slug, buscar un espacio cuyo nombre coincida
+    #    en cualquier tenant activo (caso: balance vive dentro del tenant mantra)
+    space_id_filter = None
+    if not tenant:
+        spaces_result = await db.execute(
+            select(Space).join(Tenant, Space.tenant_id == Tenant.id).where(
+                Tenant.is_active == True,
+                Space.is_active == True,
+            )
+        )
+        all_spaces = spaces_result.scalars().all()
+        for sp in all_spaces:
+            if _slug_match(sp.name, slug):
+                tenant_result = await db.execute(
+                    select(Tenant).where(Tenant.id == sp.tenant_id)
+                )
+                tenant = tenant_result.scalar_one_or_none()
+                space_id_filter = sp.id
+                break
+
     if not tenant:
         raise HTTPException(404, "Estudio no encontrado")
+
+    # 3. Si el tenant tiene múltiples espacios, filtrar por el que coincide con el slug
+    if space_id_filter is None:
+        spaces_result = await db.execute(
+            select(Space).where(Space.tenant_id == tenant.id, Space.is_active == True)
+        )
+        spaces = spaces_result.scalars().all()
+        if len(spaces) > 1:
+            for sp in spaces:
+                if _slug_match(sp.name, slug):
+                    space_id_filter = sp.id
+                    break
 
     now = datetime.now(timezone.utc)
     week_start = now - timedelta(days=now.weekday())
@@ -89,13 +131,17 @@ async def public_schedule(
     if end:
         week_end = datetime.fromisoformat(end)
 
+    filters = [
+        ClassSession.tenant_id == tenant.id,
+        ClassSession.start_datetime >= week_start,
+        ClassSession.start_datetime < week_end,
+        ClassSession.status != "cancelled",
+    ]
+    if space_id_filter is not None:
+        filters.append(ClassSession.space_id == space_id_filter)
+
     sessions_result = await db.execute(
-        select(ClassSession).where(
-            ClassSession.tenant_id == tenant.id,
-            ClassSession.start_datetime >= week_start,
-            ClassSession.start_datetime < week_end,
-            ClassSession.status != "cancelled",
-        ).order_by(ClassSession.start_datetime)
+        select(ClassSession).where(*filters).order_by(ClassSession.start_datetime)
     )
     sessions = sessions_result.scalars().all()
 
