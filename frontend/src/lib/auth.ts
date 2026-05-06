@@ -66,7 +66,7 @@ const clearSessionCookie = async () => {
   }
 }
 
-export const saveAuthData = (data: TokenResponse) => {
+export const saveAuthData = async (data: TokenResponse) => {
   setToken(data.access_token)
   setRefreshToken(data.refresh_token)
   if (data.tenant_slug) setTenantSlug(data.tenant_slug)
@@ -77,8 +77,8 @@ export const saveAuthData = (data: TokenResponse) => {
     role: data.user_role as User['role'],
     tenant_id: data.tenant_id,
   })
-  // Set HttpOnly cookie for Next.js middleware SSR auth check
-  setSessionCookie(data.access_token)
+  // Await so the HttpOnly cookie exists before the middleware checks it on navigation
+  await setSessionCookie(data.access_token)
 }
 
 export const logout = () => {

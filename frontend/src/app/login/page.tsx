@@ -28,7 +28,7 @@ export default function LoginPage() {
     setLoading(true)
     try {
       const response = await auth.login(data)
-      saveAuthData(response)
+      await saveAuthData(response)
       toast.success(`Bienvenid@, ${response.user_name}`)
       router.push(response.user_role === 'superadmin' ? '/superadmin' : '/admin/dashboard')
     } catch (e: any) {
