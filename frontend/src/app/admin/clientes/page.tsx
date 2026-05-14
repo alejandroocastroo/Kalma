@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clients } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -9,9 +9,16 @@ import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getInitials, formatDate, appointmentStatusConfig } from '@/lib/utils'
-import { Search, Plus, ChevronLeft, ChevronRight, User, Phone, Mail, Edit } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client } from '@/types'
+
+const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+
+function formatBirthDate(birth_date: string): string {
+  const [, m, d] = birth_date.split('-')
+  return `${parseInt(d)} de ${MONTHS_ES[parseInt(m) - 1]}`
+}
 
 export default function ClientesPage() {
   const [search, setSearch] = useState('')
@@ -26,6 +33,11 @@ export default function ClientesPage() {
     queryFn: () => clients.list({ search, page, limit: 15 }),
   })
 
+  const { data: birthdayClients = [] } = useQuery({
+    queryKey: ['clients-birthdays'],
+    queryFn: () => clients.birthdays(),
+  })
+
   const { data: clientAppointments = [] } = useQuery({
     queryKey: ['client-appointments', selected?.id],
     queryFn: () => clients.appointments(selected!.id),
@@ -34,6 +46,11 @@ export default function ClientesPage() {
 
   return (
     <div className="space-y-4">
+      {/* Birthday section */}
+      {birthdayClients.length > 0 && (
+        <BirthdaySection clients={birthdayClients} />
+      )}
+
       {/* Toolbar */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -137,6 +154,12 @@ export default function ClientesPage() {
                   <p className="text-gray-500">Total sesiones</p>
                   <p className="font-medium text-lg">{selected.total_sessions}</p>
                 </div>
+                {selected.birth_date && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <Cake className="w-4 h-4 text-gray-400" />
+                    <span>{formatBirthDate(selected.birth_date)}</span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -182,10 +205,84 @@ export default function ClientesPage() {
           <ClientForm
             initial={editMode ? selected : undefined}
             clientId={editMode ? selected?.id : undefined}
-            onClose={() => { setShowForm(false); setEditMode(false); qc.invalidateQueries({ queryKey: ['clients'] }) }}
+            onClose={() => { setShowForm(false); setEditMode(false); qc.invalidateQueries({ queryKey: ['clients'] }); qc.invalidateQueries({ queryKey: ['clients-birthdays'] }) }}
           />
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function BirthdaySection({ clients: list }: { clients: Client[] }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const today = new Date()
+  const todayMonth = today.getMonth() + 1
+  const todayDay = today.getDate()
+
+  const scroll = (dir: 'left' | 'right') => {
+    scrollRef.current?.scrollBy({ left: dir === 'left' ? -220 : 220, behavior: 'smooth' })
+  }
+
+  return (
+    <div className="bg-gradient-to-r from-pink-50 to-purple-50 rounded-2xl border border-pink-100 px-4 py-3">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Cake className="w-4 h-4 text-pink-500" />
+          <h3 className="text-sm font-semibold text-gray-700">Próximos cumpleaños</h3>
+          <span className="text-xs bg-pink-100 text-pink-700 font-semibold px-2 py-0.5 rounded-full">{list.length}</span>
+        </div>
+        <div className="flex gap-1">
+          <button
+            onClick={() => scroll('left')}
+            className="p-1.5 rounded-lg hover:bg-pink-100 text-gray-400 hover:text-pink-600 transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => scroll('right')}
+            className="p-1.5 rounded-lg hover:bg-pink-100 text-gray-400 hover:text-pink-600 transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+      <div
+        ref={scrollRef}
+        className="flex gap-3 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{ scrollSnapType: 'x mandatory' }}
+      >
+        {list.map((client) => {
+          const [, mStr, dStr] = client.birth_date!.split('-')
+          const month = parseInt(mStr)
+          const day = parseInt(dStr)
+          const isCurrentMonth = month === todayMonth
+          const isToday = isCurrentMonth && day === todayDay
+          const isPast = isCurrentMonth && day < todayDay
+          return (
+            <div
+              key={client.id}
+              style={{ scrollSnapAlign: 'start' }}
+              className={`flex-shrink-0 flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-xl border min-w-[84px] transition-colors ${
+                isToday ? 'bg-pink-100 border-pink-300' : 'bg-white border-gray-100'
+              }`}
+            >
+              <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold ${
+                isToday ? 'bg-pink-500 text-white' : 'bg-primary-100 text-primary-700'
+              }`}>
+                {getInitials(client.full_name)}
+              </div>
+              <p className="text-xs font-medium text-gray-800 text-center leading-tight">
+                {client.full_name.split(' ')[0]}
+              </p>
+              <p className={`text-xs font-semibold text-center ${
+                isToday ? 'text-pink-600' : isPast ? 'text-gray-400' : 'text-gray-500'
+              }`}>
+                {isToday ? '¡Hoy! 🎂' : `${day} de ${MONTHS_ES[month - 1]}`}
+              </p>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -197,6 +294,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     phone: initial?.phone || '',
     document_type: initial?.document_type || 'CC',
     document_number: initial?.document_number || '',
+    birth_date: initial?.birth_date || '',
   })
   const [loading, setLoading] = useState(false)
   const [docError, setDocError] = useState('')
@@ -217,11 +315,12 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
 
     setLoading(true)
     try {
+      const payload = { ...form, birth_date: form.birth_date || null }
       if (clientId) {
-        await clients.update(clientId, form)
+        await clients.update(clientId, payload)
         toast.success('Cliente actualizado')
       } else {
-        await clients.create(form)
+        await clients.create(payload)
         toast.success('Cliente creado')
       }
       onClose()
@@ -273,6 +372,10 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
           />
           {docError && <p className="mt-1 text-xs text-red-500">{docError}</p>}
         </div>
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento <span className="text-gray-400 font-normal">(opcional)</span></label>
+        <Input type="date" value={form.birth_date} onChange={f('birth_date')} />
       </div>
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : clientId ? 'Actualizar' : 'Crear cliente'}</Button>

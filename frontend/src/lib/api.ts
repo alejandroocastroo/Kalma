@@ -117,6 +117,8 @@ export const clients = {
     apiClient.put<Client>(`/clients/${id}`, data).then((r) => r.data),
   appointments: (id: string) =>
     apiClient.get(`/clients/${id}/appointments`).then((r) => r.data),
+  birthdays: () =>
+    apiClient.get<Client[]>('/clients/birthdays').then((r) => r.data),
 }
 
 // ── Appointments ──────────────────────────────────────────────

@@ -4,12 +4,14 @@ import { classSessions, payments, clients, appointments, reports } from '@/lib/a
 import { StatsCard } from '@/components/admin/stats-card'
 import { SessionCard } from '@/components/admin/session-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCOP, formatDateTime, appointmentStatusConfig } from '@/lib/utils'
+import { formatCOP, formatDateTime, appointmentStatusConfig, getInitials } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
-import { Calendar, Users, DollarSign, TrendingUp, Plus } from 'lucide-react'
+import { Calendar, Users, DollarSign, TrendingUp, Plus, Cake } from 'lucide-react'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import Link from 'next/link'
+
+const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 export default function DashboardPage() {
   const today = new Date()
@@ -35,6 +37,14 @@ export default function DashboardPage() {
     queryKey: ['recent-appointments'],
     queryFn: () => appointments.list(),
   })
+
+  const { data: birthdayClients = [] } = useQuery({
+    queryKey: ['clients-birthdays'],
+    queryFn: () => clients.birthdays(),
+  })
+  const thisMonthBirthdays = birthdayClients.filter(
+    (c) => parseInt(c.birth_date!.split('-')[1]) === today.getMonth() + 1
+  )
 
   const todayStr = format(today, 'yyyy-MM-dd')
   const { data: occupancyData = [], isLoading: loadingOccupancy } = useQuery({
@@ -138,6 +148,40 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      {/* Birthday card */}
+      {thisMonthBirthdays.length > 0 && (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <Cake className="w-4 h-4 text-pink-400" />
+            <h3 className="text-base font-semibold text-gray-900">Cumpleaños este mes</h3>
+            <span className="ml-auto text-xs bg-pink-50 text-pink-500 font-semibold px-2 py-0.5 rounded-full">
+              {thisMonthBirthdays.length}
+            </span>
+          </div>
+          <div className="divide-y divide-gray-50">
+            {thisMonthBirthdays.map((client) => {
+              const [, m, d] = client.birth_date!.split('-')
+              const day = parseInt(d)
+              const isToday = day === today.getDate()
+              return (
+                <div key={client.id} className="flex items-center justify-between py-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 bg-pink-50 rounded-full flex items-center justify-center text-xs font-semibold text-pink-500">
+                      {getInitials(client.full_name)}
+                    </div>
+                    <p className="text-sm font-medium text-gray-800">{client.full_name}</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isToday && <span className="text-xs font-semibold text-pink-500">¡Hoy!</span>}
+                    <p className="text-xs text-gray-400">{day} de {MONTHS_ES[parseInt(m) - 1]}</p>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Recent appointments */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">

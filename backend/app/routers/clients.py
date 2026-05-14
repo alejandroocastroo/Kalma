@@ -1,8 +1,9 @@
 import uuid
 import math
+from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, extract
 from sqlalchemy.exc import IntegrityError
 from typing import Optional
 
@@ -65,6 +66,36 @@ async def create_client(
         raise HTTPException(409, "Ya existe un cliente con ese número de documento")
     await db.refresh(client)
     return client
+
+
+@router.get("/birthdays", response_model=list[ClientResponse])
+async def birthdays_two_months(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    today = date.today()
+    this_month = today.month
+    # Next month wrapping December → January
+    next_month = 1 if this_month == 12 else this_month + 1
+    result = await db.execute(
+        select(Client)
+        .where(
+            Client.tenant_id == current_user.tenant_id,
+            Client.is_active == True,
+            Client.birth_date.isnot(None),
+            or_(
+                extract("month", Client.birth_date) == this_month,
+                extract("month", Client.birth_date) == next_month,
+            ),
+        )
+        .order_by(
+            extract("month", Client.birth_date),
+            extract("day", Client.birth_date),
+        )
+    )
+    return result.scalars().all()
 
 
 @router.get("/{client_id}", response_model=ClientResponse)
