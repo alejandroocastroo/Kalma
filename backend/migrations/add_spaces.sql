@@ -26,7 +26,7 @@ ALTER TABLE class_sessions
 
 CREATE INDEX IF NOT EXISTS ix_class_sessions_space_id ON class_sessions(space_id);
 
--- 3. Seed spaces for Mantra Pilates Studio
+-- 3. Seed spaces for Mantra Pilates Studio (idempotent — checks by name)
 DO $$
 DECLARE
     v_tenant_id UUID;
@@ -36,12 +36,17 @@ BEGIN
         RAISE NOTICE 'Tenant mantra not found — skipping spaces seed';
         RETURN;
     END IF;
-    INSERT INTO spaces (id, tenant_id, name, description, capacity, price, currency, is_active)
-    VALUES
-        (gen_random_uuid(), v_tenant_id, 'Pilates', 'Sala de Pilates', 3, 120000.00, 'COP', TRUE),
-        (gen_random_uuid(), v_tenant_id, 'Barre',   'Sala de Barre',   5, 150000.00, 'COP', TRUE)
-    ON CONFLICT DO NOTHING;
-    RAISE NOTICE 'Spaces seeded for tenant %', v_tenant_id;
+    IF NOT EXISTS (SELECT 1 FROM spaces WHERE tenant_id = v_tenant_id AND name = 'Mantra') THEN
+        INSERT INTO spaces (id, tenant_id, name, description, capacity, price, currency, is_active)
+        VALUES (gen_random_uuid(), v_tenant_id, 'Mantra', 'Sala Mantra Pilates', 6, 120000.00, 'COP', TRUE);
+        RAISE NOTICE 'Space Mantra created.';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM spaces WHERE tenant_id = v_tenant_id AND name = 'Barre') THEN
+        INSERT INTO spaces (id, tenant_id, name, description, capacity, price, currency, is_active)
+        VALUES (gen_random_uuid(), v_tenant_id, 'Barre', 'Sala de Barre', 5, 150000.00, 'COP', TRUE);
+        RAISE NOTICE 'Space Barre created.';
+    END IF;
+    RAISE NOTICE 'Spaces check done for tenant %', v_tenant_id;
 END $$;
 
 COMMIT;

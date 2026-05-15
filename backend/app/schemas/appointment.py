@@ -40,6 +40,7 @@ class AppointmentResponse(BaseModel):
     # Campos enriquecidos
     client_name: Optional[str] = None
     client_phone: Optional[str] = None
+    client_notes: Optional[str] = None
     session_start: Optional[datetime] = None
     class_type_name: Optional[str] = None
     created_at: datetime

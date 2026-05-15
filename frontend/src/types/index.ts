@@ -65,6 +65,7 @@ export interface ClassSession {
   instructor_name?: string
   space_id?: string
   space_name?: string
+  has_health_alerts?: boolean
   created_at: string
 }
 
@@ -83,6 +84,8 @@ export interface Client {
   total_sessions: number
   is_active: boolean
   created_at: string
+  active_plan_name?: string | null
+  active_membership_type?: string | null
 }
 
 export type AppointmentStatus = 'pending' | 'confirmed' | 'cancelled' | 'attended' | 'no_show'
@@ -102,6 +105,7 @@ export interface Appointment {
   notes?: string
   client_name?: string
   client_phone?: string
+  client_notes?: string
   session_start?: string
   class_type_name?: string
   created_at: string
@@ -252,7 +256,7 @@ export interface Plan {
   price_cop: number
   classes_per_week: number
   is_active: boolean
-  membership_type: 'monthly' | 'session_based'
+  membership_type: 'monthly' | 'session_based' | 'weekly_sessions'
   sessions_per_week: number | null
   total_sessions: number | null
   space_id: string | null
@@ -284,7 +288,7 @@ export interface ClientMembership {
   tenant_id: string;
   client_id: string;
   plan_id: string;
-  membership_type: 'monthly' | 'session_based';
+  membership_type: 'monthly' | 'session_based' | 'weekly_sessions';
   start_date: string;
   end_date: string | null;
   status: 'active' | 'paused' | 'cancelled';
@@ -298,6 +302,7 @@ export interface ClientMembership {
   expiry_date: string | null;
   makeups_allowed: number;
   makeups_used: number;
+  bonus_sessions: number;
   makeup_credits: number;
   notes: string | null;
   preferred_days: number[] | null;
@@ -318,7 +323,7 @@ export interface CobrosClient {
   client_id: string;
   client_name: string;
   plan_name: string | null;
-  membership_type: 'monthly' | 'session_based' | null;
+  membership_type: 'monthly' | 'session_based' | 'weekly_sessions' | null;
   priority: 1 | 2 | 3 | 4;
   status_label: string;
   next_billing_date: string | null;

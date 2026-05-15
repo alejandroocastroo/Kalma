@@ -64,5 +64,7 @@ class ClientResponse(BaseModel):
     total_sessions: int
     is_active: bool
     created_at: datetime
+    active_plan_name: Optional[str] = None
+    active_membership_type: Optional[str] = None
 
     model_config = {"from_attributes": True}

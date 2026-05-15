@@ -30,6 +30,14 @@ def calculate_expiry_date(start_date: date, scheduled_days: List[str], total_ses
     return start_date  # fallback
 
 
+def get_current_week_bounds(today: date = None):
+    """Retorna (lunes, domingo) de la semana actual."""
+    if today is None:
+        today = date.today()
+    monday = today - timedelta(days=today.weekday())
+    return monday, monday + timedelta(days=6)
+
+
 def calculate_next_billing_date(start_date: date) -> date:
     """Mismo día del mes siguiente."""
     import calendar
@@ -52,13 +60,18 @@ def get_membership_status(membership) -> str:
         if membership.next_billing_date and membership.next_billing_date <= today:
             return 'expired'
         return 'active'
-    else:  # session_based
+    elif membership.membership_type == 'session_based':
+        bonus = getattr(membership, 'bonus_sessions', 0) or 0
         sessions_remaining = None
         if membership.total_sessions is not None:
-            sessions_remaining = membership.total_sessions - (membership.sessions_used or 0)
+            sessions_remaining = membership.total_sessions + bonus - (membership.sessions_used or 0)
         if sessions_remaining is not None and sessions_remaining <= 0:
             return 'completed'
         if membership.expiry_date and membership.expiry_date < today:
+            return 'expired'
+        return 'active'
+    else:  # weekly_sessions — se comporta como monthly
+        if membership.next_billing_date and membership.next_billing_date <= today:
             return 'expired'
         return 'active'
 
@@ -85,8 +98,9 @@ def get_cobros_priority(membership, today: date) -> int:
         if delta <= 7:
             return 3
         return 4
-    else:  # session_based
-        sessions_rem = (membership.total_sessions or 0) - (membership.sessions_used or 0)
+    elif membership.membership_type == 'session_based':
+        bonus = getattr(membership, 'bonus_sessions', 0) or 0
+        sessions_rem = (membership.total_sessions or 0) + bonus - (membership.sessions_used or 0)
         if sessions_rem <= 0:
             return 2
         if sessions_rem <= 2:
@@ -97,4 +111,14 @@ def get_cobros_priority(membership, today: date) -> int:
                 return 2
             if delta <= 7:
                 return 3
+        return 4
+    else:  # weekly_sessions — se comporta como monthly en cobros
+        billing_ref = membership.next_billing_date or membership.end_date
+        if billing_ref is None:
+            return 4
+        delta = (billing_ref - today).days
+        if delta < 0:
+            return 2
+        if delta <= 7:
+            return 3
         return 4

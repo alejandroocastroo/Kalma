@@ -24,29 +24,17 @@ function MonthlyUsageBar({ membershipId }: { membershipId: string }) {
   })
   if (!stats) return <div className="h-4 w-full bg-gray-100 rounded-full animate-pulse" />
 
-  const total = stats.classes_per_month + stats.makeup_credits
-  const committed = stats.total_committed_month
-  const pct = total > 0 ? Math.min(100, (committed / total) * 100) : 0
-  const barColor = pct >= 100 ? 'bg-red-400' : pct >= 75 ? 'bg-amber-400' : 'bg-green-400'
-
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-gray-500">Clases este mes</span>
-        <span className={`font-semibold ${pct >= 100 ? 'text-red-600' : pct >= 75 ? 'text-amber-600' : 'text-gray-700'}`}>
-          {committed} <span className="font-normal text-gray-400">/ {total}</span>
-          {stats.makeup_credits > 0 && (
-            <span className="ml-1 text-amber-500">(+{stats.makeup_credits} repos.)</span>
-          )}
-        </span>
-      </div>
-      <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
-      </div>
-      <div className="flex items-center justify-between text-xs text-gray-400">
-        <span>{stats.used_this_month} asistidas · {stats.pending_this_month} reservadas</span>
-        <span>{stats.classes_per_week} cls/sem × 4</span>
-      </div>
+    <div className="flex items-center justify-between text-xs text-gray-500">
+      <span>
+        <span className="font-semibold text-gray-700">{stats.used_this_month}</span> asistidas este mes
+        {stats.pending_this_month > 0 && (
+          <span className="text-gray-400"> · {stats.pending_this_month} reservadas</span>
+        )}
+      </span>
+      {stats.makeup_credits > 0 && (
+        <span className="text-amber-500">+{stats.makeup_credits} repos.</span>
+      )}
     </div>
   )
 }
@@ -323,10 +311,13 @@ export default function MembresiasPage() {
   const [makeupOriginalDate, setMakeupOriginalDate] = useState('')
   const [makeupSelectedSession, setMakeupSelectedSession] = useState<ClassSession | null>(null)
   const [makeupSessionSearch, setMakeupSessionSearch] = useState('')
+  const [bonusTarget, setBonusTarget] = useState<ClientMembership | null>(null)
+  const [bonusQuantity, setBonusQuantity] = useState('1')
+  const [bonusNotes, setBonusNotes] = useState('')
   const [form, setForm] = useState({
     client_id: '',
     plan_id: '',
-    membership_type: 'monthly' as 'monthly' | 'session_based',
+    membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions',
     start_date: '',
     end_date: '',
     sessions_per_week: '' as '' | '2' | '3' | '5',
@@ -359,6 +350,7 @@ export default function MembresiasPage() {
       status: statusFilter !== 'all' ? statusFilter : 'not_cancelled',
       search: search || undefined,
       space_id: spaceFilter || undefined,
+      sort_by: statusFilter === 'active' ? 'fullness' : undefined,
       page,
       limit: 20,
     }),
@@ -470,6 +462,19 @@ export default function MembresiasPage() {
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al registrar reposición'),
   })
 
+  const addBonusMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: { quantity: number; notes?: string } }) =>
+      memberships.addBonus(id, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memberships'] })
+      toast.success('Clases adicionales agregadas')
+      setBonusTarget(null)
+      setBonusQuantity('1')
+      setBonusNotes('')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al agregar clases'),
+  })
+
   const SCHEDULED_DAYS = [
     { key: 'monday', label: 'L' }, { key: 'tuesday', label: 'M' },
     { key: 'wednesday', label: 'X' }, { key: 'thursday', label: 'J' },
@@ -479,7 +484,7 @@ export default function MembresiasPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ client_id: '', plan_id: '', membership_type: 'monthly', start_date: '', end_date: '', sessions_per_week: '', scheduled_days: [], makeups_allowed: '1', notes: '', preferred_days: [], preferred_hour: '', preferred_space_id: '' })
+    setForm({ client_id: '', plan_id: '', membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions', start_date: '', end_date: '', sessions_per_week: '', scheduled_days: [], makeups_allowed: '1', notes: '', preferred_days: [], preferred_hour: '', preferred_space_id: '' })
     setClientSearch('')
     setSelectedClientName('')
     setClientDropdownOpen(false)
@@ -491,7 +496,7 @@ export default function MembresiasPage() {
     setForm({
       client_id: m.client_id,
       plan_id: m.plan_id,
-      membership_type: (m.membership_type as 'monthly' | 'session_based') || 'monthly',
+      membership_type: (m.membership_type as 'monthly' | 'session_based' | 'weekly_sessions') || 'monthly',
       start_date: m.start_date.slice(0, 10),
       end_date: m.end_date ? m.end_date.slice(0, 10) : '',
       sessions_per_week: m.sessions_per_week ? String(m.sessions_per_week) as '2'|'3'|'5' : '',
@@ -517,7 +522,7 @@ export default function MembresiasPage() {
     setForm(f => ({
       ...f,
       plan_id: planId,
-      membership_type: plan.membership_type as 'monthly' | 'session_based',
+      membership_type: plan.membership_type as 'monthly' | 'session_based' | 'weekly_sessions',
       sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) as '2' | '3' | '5' : '',
     }))
   }
@@ -530,6 +535,9 @@ export default function MembresiasPage() {
     if (form.membership_type === 'session_based') {
       if (!form.sessions_per_week) { toast.error('Selecciona las sesiones por semana'); return }
       if (form.scheduled_days.length === 0) { toast.error('Selecciona al menos un día de asistencia'); return }
+    }
+    if (form.membership_type === 'weekly_sessions') {
+      if (!form.sessions_per_week) { toast.error('Selecciona las sesiones por semana'); return }
     }
     if (editing) {
       const payload = {
@@ -691,33 +699,47 @@ export default function MembresiasPage() {
                 }
               </div>
 
-              {/* Session progress for session_based */}
-              {m.membership_type === 'session_based' && m.total_sessions != null && (
+              {/* Session progress for session_based and weekly_sessions */}
+              {(m.membership_type === 'session_based' || m.membership_type === 'weekly_sessions') && m.total_sessions != null && (
                 <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-500">Sesiones</span>
-                    <span className="font-semibold text-gray-700">
-                      {m.sessions_used} <span className="font-normal text-gray-400">/ {m.total_sessions}</span>
-                      {m.sessions_remaining != null && m.sessions_remaining <= 2 && (
-                        <span className="ml-1 text-amber-500">({m.sessions_remaining} restantes)</span>
-                      )}
-                    </span>
-                  </div>
-                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        (m.sessions_used / m.total_sessions) >= 0.9 ? 'bg-red-400' :
-                        (m.sessions_used / m.total_sessions) >= 0.7 ? 'bg-amber-400' : 'bg-green-400'
-                      }`}
-                      style={{ width: `${Math.min(100, (m.sessions_used / m.total_sessions) * 100)}%` }}
-                    />
-                  </div>
+                  {(() => {
+                    const bonusAmt = m.bonus_sessions || 0
+                    const totalWithBonus = m.total_sessions + bonusAmt
+                    const pct = Math.min(100, (m.sessions_used / totalWithBonus) * 100)
+                    return (
+                      <>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">Sesiones</span>
+                          <span className="font-semibold text-gray-700">
+                            {m.sessions_used} <span className="font-normal text-gray-400">/ {totalWithBonus}</span>
+                            {bonusAmt > 0 && <span className="ml-1 text-emerald-600">(+{bonusAmt} bonus)</span>}
+                            {m.sessions_remaining != null && m.sessions_remaining <= 2 && (
+                              <span className="ml-1 text-amber-500">({m.sessions_remaining} restantes)</span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${
+                              pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-green-400'
+                            }`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </>
+                    )
+                  })()}
                   {m.scheduled_days && m.scheduled_days.length > 0 && (
                     <p className="text-xs text-gray-400">
                       {m.scheduled_days.map(d => d.slice(0,3).charAt(0).toUpperCase() + d.slice(1,3)).join(' · ')}
                     </p>
                   )}
                 </div>
+              )}
+
+              {/* Info facturación para weekly_sessions */}
+              {m.membership_type === 'weekly_sessions' && m.billing_day != null && (
+                <p className="text-xs text-gray-400">Factura día {m.billing_day}</p>
               )}
 
               {/* Horario fijo */}
@@ -733,11 +755,8 @@ export default function MembresiasPage() {
                 </div>
               )}
 
-              {/* Monthly usage bar (active only) */}
-              {m.status === 'active' && m.membership_type !== 'session_based' && <MonthlyUsageBar membershipId={m.id} />}
-
-              {/* Makeup sessions */}
-              <MakeupSessionsBlock makeupSessions={m.makeup_sessions ?? []} />
+              {/* Monthly usage bar (solo para monthly) */}
+              {m.status === 'active' && m.membership_type === 'monthly' && <MonthlyUsageBar membershipId={m.id} />}
 
               {/* Bottom row */}
               <div className="flex items-center justify-end pt-1 flex-wrap gap-2">
@@ -753,14 +772,10 @@ export default function MembresiasPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => { setMakeupTarget(m); setMakeupStep(1); setMakeupOriginalDate(''); setMakeupSelectedSession(null) }}
-                    className={`gap-1 text-xs px-2 py-1 h-auto ${
-                      m.makeup_credits > 0
-                        ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
-                        : ''
-                    }`}
+                    onClick={() => { setBonusTarget(m); setBonusQuantity('1'); setBonusNotes('') }}
+                    className="gap-1 text-xs px-2 py-1 h-auto text-emerald-700 border-emerald-200 hover:bg-emerald-50"
                   >
-                    <RotateCcw className="w-3 h-3" /> Reposición
+                    <Plus className="w-3 h-3" /> Agregar clases
                   </Button>
                 </div>
               </div>
@@ -786,7 +801,9 @@ export default function MembresiasPage() {
             {!editing && form.plan_id && (
               <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
                 Tipo: <span className="font-semibold text-gray-800">
-                  {form.membership_type === 'session_based' ? 'Por sesiones' : 'Mensualidad fija'}
+                  {form.membership_type === 'session_based' ? 'Por sesiones (paquete)'
+                    : form.membership_type === 'weekly_sessions' ? 'Sesiones semanales'
+                    : 'Mensualidad fija'}
                 </span>
                 <span className="text-xs text-gray-400 ml-2">(se toma del plan)</span>
               </div>
@@ -854,7 +871,7 @@ export default function MembresiasPage() {
             </div>
 
             {/* Campos según tipo */}
-            {form.membership_type === 'monthly' ? (
+            {form.membership_type === 'monthly' && (
               <div className="space-y-1">
                 <label className="block text-sm font-medium text-gray-700">Fecha fin</label>
                 <Input
@@ -863,17 +880,16 @@ export default function MembresiasPage() {
                   onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
                 />
               </div>
-            ) : (
+            )}
+
+            {form.membership_type === 'session_based' && (
               <div className="space-y-3">
-                {/* Sesiones por semana — viene del plan seleccionado */}
                 {form.sessions_per_week && (
                   <div className="px-3 py-2 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-700">
                     Plan seleccionado: <span className="font-semibold">{form.sessions_per_week}x / semana</span>
                     {' '}· {Number(form.sessions_per_week) * 4} sesiones en total
                   </div>
                 )}
-
-                {/* Días de asistencia */}
                 <div className="space-y-1">
                   <label className="block text-sm font-medium text-gray-700">Días de asistencia *</label>
                   <div className="flex gap-1.5">
@@ -900,24 +916,23 @@ export default function MembresiasPage() {
                   </div>
                   {form.sessions_per_week && form.scheduled_days.length > 0 && (
                     <p className="text-xs text-gray-400 mt-1">
-                      La fecha de vencimiento se calculará automáticamente contando {Number(form.sessions_per_week) * 4} ocurrencias de esos días desde el inicio.
+                      La fecha de vencimiento se calculará contando {Number(form.sessions_per_week) * 4} ocurrencias desde el inicio.
                     </p>
                   )}
                 </div>
+              </div>
+            )}
 
-                {/* Reposiciones permitidas */}
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-700">Reposiciones permitidas</label>
-                  <select
-                    value={form.makeups_allowed}
-                    onChange={e => setForm(f => ({ ...f, makeups_allowed: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    {[0, 1, 2, 3].map(n => (
-                      <option key={n} value={n}>{n === 0 ? 'Sin reposiciones' : `${n} reposición${n > 1 ? 'es' : ''}`}</option>
-                    ))}
-                  </select>
-                </div>
+            {form.membership_type === 'weekly_sessions' && (
+              <div className="space-y-2">
+                {form.sessions_per_week && form.start_date && (
+                  <div className="px-3 py-2.5 rounded-xl bg-blue-50 border border-blue-100 text-sm text-blue-700">
+                    <p>Referencia: <span className="font-semibold">{form.sessions_per_week} sesiones/semana</span></p>
+                    <p className="text-xs text-blue-500 mt-0.5">
+                      Sin días fijos. Se renueva el día {new Date(form.start_date + 'T00:00:00').getDate()} de cada mes. El cliente puede usar sus clases libremente según acuerdo con el estudio.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
             {editing && (
@@ -1025,6 +1040,53 @@ export default function MembresiasPage() {
               className="bg-primary-600 hover:bg-primary-700 text-white"
             >
               {isSaving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Agregar clases bonus */}
+      <Dialog open={!!bonusTarget} onOpenChange={open => { if (!open) { setBonusTarget(null); setBonusQuantity('1'); setBonusNotes('') } }}>
+        <DialogContent title="Agregar clases adicionales">
+          <div className="space-y-4 py-2">
+            <p className="text-sm text-gray-600">
+              Membresía de <span className="font-semibold">{bonusTarget?.client_name}</span>
+            </p>
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700">Cantidad de clases *</label>
+              <Input
+                type="number"
+                min="1"
+                max="50"
+                value={bonusQuantity}
+                onChange={e => setBonusQuantity(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="block text-sm font-medium text-gray-700">Motivo <span className="text-gray-400 font-normal">(opcional)</span></label>
+              <textarea
+                value={bonusNotes}
+                onChange={e => setBonusNotes(e.target.value)}
+                placeholder="Ej: compensación por cierre del estudio, cortesía, regalo..."
+                rows={2}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setBonusTarget(null)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (!bonusTarget) return
+                addBonusMutation.mutate({
+                  id: bonusTarget.id,
+                  data: { quantity: Number(bonusQuantity), notes: bonusNotes || undefined },
+                })
+              }}
+              disabled={addBonusMutation.isPending || !bonusQuantity || Number(bonusQuantity) < 1}
+              className="bg-primary-600 hover:bg-primary-700 text-white"
+            >
+              {addBonusMutation.isPending ? 'Guardando...' : 'Confirmar'}
             </Button>
           </div>
         </DialogContent>

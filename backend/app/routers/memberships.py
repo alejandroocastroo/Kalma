@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
+import sqlalchemy as sa
 from sqlalchemy import select, func, and_
 from sqlalchemy.orm import selectinload
 
@@ -29,6 +30,11 @@ router = APIRouter(prefix="/memberships", tags=["Membresías"])
 # ---------------------------------------------------------------------------
 # Pydantic schemas v2
 # ---------------------------------------------------------------------------
+
+class AddBonusSessionsBody(BaseModel):
+    quantity: int
+    notes: Optional[str] = None
+
 
 class MakeupSessionCreate(BaseModel):
     original_date: date
@@ -91,8 +97,10 @@ def _enrich_loaded(m: ClientMembership) -> dict:
     data["expiry_date"] = m.expiry_date
     data["makeups_allowed"] = m.makeups_allowed
     data["makeups_used"] = m.makeups_used
+    data["bonus_sessions"] = m.bonus_sessions or 0
     data["sessions_remaining"] = (
-        m.total_sessions - (m.sessions_used or 0) if m.total_sessions is not None else None
+        m.total_sessions + (m.bonus_sessions or 0) - (m.sessions_used or 0)
+        if m.total_sessions is not None else None
     )
     data["makeup_sessions"] = [
         MakeupSessionResponse.model_validate(mu).model_dump()
@@ -131,8 +139,10 @@ async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
     data["expiry_date"] = m.expiry_date
     data["makeups_allowed"] = m.makeups_allowed
     data["makeups_used"] = m.makeups_used
+    data["bonus_sessions"] = m.bonus_sessions or 0
     data["sessions_remaining"] = (
-        m.total_sessions - (m.sessions_used or 0) if m.total_sessions is not None else None
+        m.total_sessions + (m.bonus_sessions or 0) - (m.sessions_used or 0)
+        if m.total_sessions is not None else None
     )
     data["makeup_sessions"] = [
         MakeupSessionResponse.model_validate(mu).model_dump() for mu in makeups
@@ -163,18 +173,18 @@ async def auto_deduct(
     appointments = result.scalars().all()
     for appt in appointments:
         appt.status = "attended"
-        # Increment sessions_used on active session_based membership
+        # Increment sessions_used on active session-tracking membership
         mem_result = await db.execute(
             select(ClientMembership).where(
                 ClientMembership.client_id == appt.client_id,
                 ClientMembership.tenant_id == appt.tenant_id,
                 ClientMembership.status == "active",
-                ClientMembership.membership_type == "session_based",
+                ClientMembership.membership_type.in_(["session_based", "weekly_sessions"]),
             ).order_by(ClientMembership.created_at.desc()).limit(1)
         )
         membership = mem_result.scalar_one_or_none()
-        if membership and membership.sessions_used < (membership.total_sessions or 0):
-            membership.sessions_used += 1
+        if membership:
+            membership.sessions_used = (membership.sessions_used or 0) + 1
     await db.commit()
     return {"updated": len(appointments)}
 
@@ -189,6 +199,7 @@ async def list_memberships(
     status: Optional[str] = None,
     search: Optional[str] = Query(None, max_length=100),
     space_id: Optional[str] = None,
+    sort_by: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
@@ -225,7 +236,14 @@ async def list_memberships(
             selectinload(ClientMembership.preferred_space),
             selectinload(ClientMembership.makeup_sessions),
         )
-        .order_by(ClientMembership.created_at.desc())
+        .order_by(
+            (
+                ClientMembership.sessions_used.cast(sa.Float) /
+                sa.func.nullif(ClientMembership.total_sessions, 0)
+            ).desc().nulls_last()
+            if sort_by == "fullness"
+            else ClientMembership.created_at.desc()
+        )
         .offset((page - 1) * limit)
         .limit(limit)
     )
@@ -283,8 +301,16 @@ async def create_membership_v2(
             data["expiry_date"] = calculate_expiry_date(body.start_date, body.scheduled_days, total)
         else:
             data["expiry_date"] = None
+    elif body.membership_type == "weekly_sessions":
+        if not body.sessions_per_week:
+            raise HTTPException(400, "sessions_per_week es requerido para membresías de tipo weekly_sessions")
+        data["billing_day"] = body.start_date.day
+        data["next_billing_date"] = calculate_next_billing_date(body.start_date)
+        data["total_sessions"] = body.sessions_per_week * 4
+        data["scheduled_days"] = None
+        data["expiry_date"] = None
     else:
-        raise HTTPException(400, f"membership_type inválido: {body.membership_type}. Use 'monthly' o 'session_based'")
+        raise HTTPException(400, f"membership_type inválido: {body.membership_type}. Use 'monthly', 'session_based' o 'weekly_sessions'")
 
     m = ClientMembership(tenant_id=current_user.tenant_id, **data)
     db.add(m)
@@ -333,6 +359,27 @@ async def add_makeup(
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
     m.makeup_credits += body.credits
+    await db.commit()
+    await db.refresh(m)
+    return await _enrich(m, db)
+
+
+@router.post("/{membership_id}/bonus-sessions")
+async def add_bonus_sessions(
+    membership_id: str,
+    body: AddBonusSessionsBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Agrega clases adicionales (bonus) a cualquier membresía activa."""
+    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    if not m or m.tenant_id != current_user.tenant_id:
+        raise HTTPException(404, "Membresía no encontrada")
+    if body.quantity <= 0:
+        raise HTTPException(400, "La cantidad debe ser mayor a 0")
+    m.bonus_sessions = (m.bonus_sessions or 0) + body.quantity
+    if body.notes:
+        m.notes = f"{m.notes or ''}\n[+{body.quantity} clases] {body.notes}".strip()
     await db.commit()
     await db.refresh(m)
     return await _enrich(m, db)

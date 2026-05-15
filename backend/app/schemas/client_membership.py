@@ -55,6 +55,7 @@ class ClientMembershipResponse(BaseModel):
     expiry_date: Optional[date] = None
     makeups_allowed: int = 1
     makeups_used: int = 0
+    bonus_sessions: int = 0
     makeup_sessions: List[MakeupSessionResponse] = []
     # legacy fields
     start_date: date

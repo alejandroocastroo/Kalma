@@ -27,7 +27,7 @@ class ClientMembership(Base, TimestampMixin):
     preferred_space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True)
 
     # v2 fields — cobros
-    membership_type: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")  # monthly | session_based
+    membership_type: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")  # monthly | session_based | weekly_sessions
     billing_day: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     next_billing_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     sessions_per_week: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
@@ -37,6 +37,7 @@ class ClientMembership(Base, TimestampMixin):
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     makeups_allowed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     makeups_used: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
+    bonus_sessions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     client = relationship("Client", lazy="noload")
     plan = relationship("Plan", back_populates="memberships", lazy="noload")

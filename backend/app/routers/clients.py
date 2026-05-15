@@ -12,6 +12,8 @@ from app.auth.jwt import get_current_active_user
 from app.schemas.client import ClientCreate, ClientUpdate, ClientResponse
 from app.schemas.common import PaginatedResponse
 from app.models.client import Client
+from app.models.client_membership import ClientMembership
+from app.models.plan import Plan
 
 router = APIRouter(prefix="/clients", tags=["Clientes"])
 
@@ -40,8 +42,41 @@ async def list_clients(
     q = q.order_by(Client.full_name).offset((page - 1) * limit).limit(limit)
     result = await db.execute(q)
     items = result.scalars().all()
+
+    # Batch-fetch active membership for each client (2 queries total, no N+1)
+    client_ids = [c.id for c in items]
+    mem_map: dict = {}
+    if client_ids:
+        mem_rows = await db.execute(
+            select(
+                ClientMembership.client_id,
+                Plan.name.label("plan_name"),
+                ClientMembership.membership_type,
+                ClientMembership.created_at,
+            )
+            .join(Plan, ClientMembership.plan_id == Plan.id, isouter=True)
+            .where(
+                ClientMembership.client_id.in_(client_ids),
+                ClientMembership.tenant_id == current_user.tenant_id,
+                ClientMembership.status == "active",
+            )
+            .order_by(ClientMembership.client_id, ClientMembership.created_at.desc())
+            .distinct(ClientMembership.client_id)
+        )
+        for row in mem_rows:
+            mem_map[row.client_id] = {
+                "active_plan_name": row.plan_name,
+                "active_membership_type": row.membership_type,
+            }
+
+    enriched = []
+    for c in items:
+        d = ClientResponse.model_validate(c).model_dump()
+        d.update(mem_map.get(c.id, {"active_plan_name": None, "active_membership_type": None}))
+        enriched.append(d)
+
     return PaginatedResponse(
-        items=items,
+        items=enriched,
         total=total,
         page=page,
         limit=limit,

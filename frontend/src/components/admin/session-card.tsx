@@ -1,6 +1,6 @@
 import { ClassSession } from '@/types'
 import { formatTime } from '@/lib/utils'
-import { Users } from 'lucide-react'
+import { Users, AlertCircle } from 'lucide-react'
 
 interface SessionCardProps {
   session: ClassSession
@@ -15,9 +15,12 @@ export function SessionCard({ session, onClick }: SessionCardProps) {
     <div
       onClick={onClick}
       style={{ borderLeftColor: session.class_type_color || '#6366f1' }}
-      className="border-l-4 bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition mb-1 text-left w-full"
+      className="relative border-l-4 bg-white rounded-lg shadow-sm p-3 cursor-pointer hover:shadow-md transition mb-1 text-left w-full"
     >
-      <p className="font-semibold text-sm text-gray-900 truncate">{session.class_type_name || 'Clase'}</p>
+      {session.has_health_alerts && (
+        <AlertCircle className="absolute top-2 right-2 w-3.5 h-3.5 text-amber-400" />
+      )}
+      <p className="font-semibold text-sm text-gray-900 truncate pr-5">{session.class_type_name || 'Clase'}</p>
       <p className="text-xs text-gray-500 mt-0.5">
         {formatTime(session.start_datetime)} · {session.instructor_name || 'Sin instructor'}
       </p>

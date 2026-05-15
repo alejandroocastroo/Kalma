@@ -1149,6 +1149,12 @@ export default function AgendaPage() {
                               )}
                             </p>
                             <p className="text-xs text-gray-500">{appt.client_phone}</p>
+                            {appt.client_notes && (
+                              <p className="text-xs text-amber-600 flex items-center gap-1 mt-0.5">
+                                <AlertCircle className="w-3 h-3 flex-shrink-0" />
+                                <span className="line-clamp-2">{appt.client_notes}</span>
+                              </p>
+                            )}
                           </div>
                           <div className="flex items-center gap-2">
                             {appt.paid && <Badge variant="success">Pagó</Badge>}

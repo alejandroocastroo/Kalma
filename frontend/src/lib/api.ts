@@ -221,12 +221,12 @@ export const plans = {
 
 // ── Memberships ───────────────────────────────────────────────
 export const memberships = {
-  list: (params?: { client_id?: string; status?: string; search?: string; space_id?: string; page?: number; limit?: number }) =>
+  list: (params?: { client_id?: string; status?: string; search?: string; space_id?: string; sort_by?: string; page?: number; limit?: number }) =>
     apiClient.get<MembershipsListResponse>('/memberships', { params }).then(r => r.data),
   create: (data: { client_id: string; plan_id: string; start_date: string; end_date?: string; notes?: string }) =>
     apiClient.post<ClientMembership>('/memberships', data).then(r => r.data),
   createV2: (data: {
-    client_id: string; plan_id: string; membership_type: 'monthly' | 'session_based';
+    client_id: string; plan_id: string; membership_type: 'monthly' | 'session_based' | 'weekly_sessions';
     start_date: string; sessions_per_week?: number; scheduled_days?: string[];
     makeups_allowed?: number; notes?: string; preferred_days?: number[];
     preferred_hour?: number; preferred_space_id?: string;
@@ -236,6 +236,8 @@ export const memberships = {
   autoDeduct: () => apiClient.post<{ updated: number }>('/memberships/auto-deduct').then(r => r.data),
   addMakeup: (id: string, credits: number) =>
     apiClient.post<ClientMembership>(`/memberships/${id}/add-makeup`, { credits }).then(r => r.data),
+  addBonus: (id: string, data: { quantity: number; notes?: string }) =>
+    apiClient.post<ClientMembership>(`/memberships/${id}/bonus-sessions`, data).then(r => r.data),
   weeklyStats: (id: string) =>
     apiClient.get<WeeklyStats>(`/memberships/${id}/weekly-stats`).then(r => r.data),
   autoBook: (id: string) =>

@@ -11,6 +11,7 @@ from app.models.appointment import Appointment
 from app.models.class_session import ClassSession
 from app.models.client import Client
 from app.models.class_type import ClassType
+from app.models.client_membership import ClientMembership
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
@@ -21,6 +22,7 @@ async def _enrich(appt: Appointment, db: AsyncSession) -> dict:
     if client:
         data["client_name"] = client.full_name
         data["client_phone"] = client.phone
+        data["client_notes"] = client.notes
     session = await db.get(ClassSession, appt.class_session_id)
     if session:
         data["session_start"] = session.start_datetime
@@ -133,10 +135,22 @@ async def mark_attended(
     if not appt:
         raise HTTPException(404, "Cita no encontrada")
     appt.status = "attended"
-    # Increment client total_sessions
+    # Increment client lifetime counter
     client = await db.get(Client, appt.client_id)
     if client:
         client.total_sessions += 1
+    # Increment sessions_used on active session-tracking membership
+    mem_result = await db.execute(
+        select(ClientMembership).where(
+            ClientMembership.client_id == appt.client_id,
+            ClientMembership.tenant_id == appt.tenant_id,
+            ClientMembership.status == "active",
+            ClientMembership.membership_type.in_(["session_based", "weekly_sessions"]),
+        ).order_by(ClientMembership.created_at.desc()).limit(1)
+    )
+    membership = mem_result.scalar_one_or_none()
+    if membership:
+        membership.sessions_used = (membership.sessions_used or 0) + 1
     await db.commit()
     return {"message": "Asistencia registrada"}
 

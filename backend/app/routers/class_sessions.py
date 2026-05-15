@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 
@@ -47,6 +47,18 @@ async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
     # custom_name overrides the display name if set
     if session.custom_name:
         data["class_type_name"] = session.custom_name
+    # Flag sessions where any active attendee has health notes
+    alerts_count = await db.execute(
+        select(func.count()).select_from(Appointment).join(
+            Client, Appointment.client_id == Client.id
+        ).where(
+            Appointment.class_session_id == session.id,
+            Appointment.status.notin_(["cancelled"]),
+            Client.notes.isnot(None),
+            Client.notes != "",
+        )
+    )
+    data["has_health_alerts"] = (alerts_count.scalar() or 0) > 0
     return data
 
 

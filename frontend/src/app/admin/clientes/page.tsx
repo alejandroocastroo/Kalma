@@ -75,7 +75,7 @@ export default function ClientesPage() {
               <TableHead>Cliente</TableHead>
               <TableHead>Teléfono</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Sesiones</TableHead>
+              <TableHead>Membresía</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -105,7 +105,13 @@ export default function ClientesPage() {
                     <TableCell className="text-gray-500">{client.phone || '—'}</TableCell>
                     <TableCell className="text-gray-500 text-sm">{client.email || '—'}</TableCell>
                     <TableCell>
-                      <span className="font-medium">{client.total_sessions}</span>
+                      {client.active_plan_name ? (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5">
+                          {client.active_plan_name}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">Sin plan</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Badge variant={client.is_active ? 'success' : 'secondary'}>
@@ -161,6 +167,13 @@ export default function ClientesPage() {
                   </div>
                 )}
               </div>
+
+              {selected.notes && (
+                <div className="px-3 py-2.5 rounded-xl bg-amber-50 border border-amber-100">
+                  <p className="text-xs text-amber-600 font-semibold mb-1">Observaciones</p>
+                  <p className="text-sm text-amber-800 leading-relaxed">{selected.notes}</p>
+                </div>
+              )}
 
               <div>
                 <p className="text-sm font-semibold text-gray-700 mb-3">Historial de citas</p>
@@ -295,6 +308,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     document_type: initial?.document_type || 'CC',
     document_number: initial?.document_number || '',
     birth_date: initial?.birth_date || '',
+    notes: initial?.notes || '',
   })
   const [loading, setLoading] = useState(false)
   const [docError, setDocError] = useState('')
@@ -315,7 +329,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
 
     setLoading(true)
     try {
-      const payload = { ...form, birth_date: form.birth_date || null }
+      const payload = { ...form, birth_date: form.birth_date || null, notes: form.notes || null }
       if (clientId) {
         await clients.update(clientId, payload)
         toast.success('Cliente actualizado')
@@ -334,7 +348,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     } finally { setLoading(false) }
   }
 
-  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+  const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [field]: e.target.value })
     if (field === 'document_number') setDocError('')
   }
@@ -376,6 +390,16 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento <span className="text-gray-400 font-normal">(opcional)</span></label>
         <Input type="date" value={form.birth_date} onChange={f('birth_date')} />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400 font-normal">(lesiones, cirugías, restricciones)</span></label>
+        <textarea
+          value={form.notes}
+          onChange={f('notes')}
+          placeholder="Ej: operada de rodilla derecha, no puede hacer flexiones de cadera completas..."
+          rows={3}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+        />
       </div>
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : clientId ? 'Actualizar' : 'Crear cliente'}</Button>

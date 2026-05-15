@@ -45,6 +45,7 @@ class ClassSessionResponse(BaseModel):
     class_type_color: Optional[str] = None
     space_name: Optional[str] = None
     instructor_name: Optional[str] = None
+    has_health_alerts: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}

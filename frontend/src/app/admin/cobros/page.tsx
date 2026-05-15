@@ -52,6 +52,17 @@ export default function CobrosPage() {
       return 'Mensualidad';
     }
 
+    if (client.membership_type === 'weekly_sessions') {
+      const parts: string[] = []
+      if (client.sessions_used != null && client.total_sessions != null) {
+        parts.push(`${client.sessions_used} / ${client.total_sessions} clases`)
+      }
+      if (client.next_billing_date) {
+        parts.push(`Próximo cobro: ${format(parseISO(client.next_billing_date), "d 'de' MMM yyyy", { locale: es })}`)
+      }
+      return parts.length ? parts.join(' · ') : 'Sesiones semanales'
+    }
+
     // session_based
     const sesiones =
       client.sessions_remaining !== null

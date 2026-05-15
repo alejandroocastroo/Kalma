@@ -22,7 +22,7 @@ export default function PlanesPage() {
     price_cop: '',
     classes_per_week: '3',
     is_active: true,
-    membership_type: 'monthly' as 'monthly' | 'session_based',
+    membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions',
     sessions_per_week: '3' as '2' | '3' | '5',
     space_id: '',
   })
@@ -59,7 +59,7 @@ export default function PlanesPage() {
 
   function openCreate() {
     setEditing(null)
-    setForm({ name: '', description: '', price_cop: '', classes_per_week: '3', is_active: true, membership_type: 'monthly', sessions_per_week: '3', space_id: '' })
+    setForm({ name: '', description: '', price_cop: '', classes_per_week: '3', is_active: true, membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions', sessions_per_week: '3', space_id: '' })
     setDialogOpen(true)
   }
 
@@ -71,7 +71,7 @@ export default function PlanesPage() {
       price_cop: String(plan.price_cop),
       classes_per_week: String(plan.classes_per_week),
       is_active: plan.is_active,
-      membership_type: plan.membership_type || 'monthly',
+      membership_type: (plan.membership_type || 'monthly') as 'monthly' | 'session_based' | 'weekly_sessions',
       sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) as '2' | '3' | '5' : '3',
       space_id: plan.space_id || '',
     })
@@ -83,7 +83,7 @@ export default function PlanesPage() {
       toast.error('Completa todos los campos requeridos')
       return
     }
-    const spw = form.membership_type === 'session_based' ? Number(form.sessions_per_week) : null
+    const spw = (form.membership_type === 'session_based' || form.membership_type === 'weekly_sessions') ? Number(form.sessions_per_week) : null
     saveMutation.mutate({
       name: form.name.trim(),
       description: form.description || undefined,
@@ -145,8 +145,10 @@ export default function PlanesPage() {
                 )}
                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">
                   {plan.membership_type === 'session_based'
-                    ? `${plan.sessions_per_week ?? plan.classes_per_week}x semana`
-                    : 'Mensualidad'}
+                    ? `${plan.sessions_per_week ?? plan.classes_per_week}x sem (paquete)`
+                    : plan.membership_type === 'weekly_sessions'
+                      ? `${plan.sessions_per_week ?? plan.classes_per_week}x sem (semanal)`
+                      : 'Mensualidad'}
                 </span>
               </div>
               {plan.description && (
@@ -214,15 +216,16 @@ export default function PlanesPage() {
             {/* Tipo de plan */}
             <div className="space-y-1">
               <label className="block text-sm font-medium text-gray-700">Tipo *</label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2">
                 {[
-                  { value: 'monthly', label: 'Mensualidad fija', desc: 'Vence el mismo día cada mes' },
-                  { value: 'session_based', label: 'Por sesiones', desc: 'Vence al agotar las sesiones' },
+                  { value: 'monthly', label: 'Mensualidad fija', desc: 'Vence el mismo día cada mes, sin límite de sesiones' },
+                  { value: 'session_based', label: 'Por sesiones (paquete)', desc: 'Vence al agotar las sesiones en días seleccionados' },
+                  { value: 'weekly_sessions', label: 'Sesiones semanales', desc: 'X sesiones/semana, se renueva mes a mes sin días fijos' },
                 ].map(opt => (
                   <button
                     key={opt.value}
                     type="button"
-                    onClick={() => setForm(f => ({ ...f, membership_type: opt.value as 'monthly' | 'session_based' }))}
+                    onClick={() => setForm(f => ({ ...f, membership_type: opt.value as 'monthly' | 'session_based' | 'weekly_sessions' }))}
                     className={`p-3 rounded-xl border text-left transition ${
                       form.membership_type === opt.value
                         ? 'border-primary-500 bg-primary-50 text-primary-700'
@@ -246,15 +249,15 @@ export default function PlanesPage() {
                   placeholder="150000"
                 />
               </div>
-              {form.membership_type === 'session_based' ? (
+              {(form.membership_type === 'session_based' || form.membership_type === 'weekly_sessions') ? (
                 <div className="space-y-1">
                   <label className="block text-sm font-medium text-gray-700">Sesiones/semana *</label>
                   <select
                     value={form.sessions_per_week}
-                    onChange={e => setForm(f => ({ ...f, sessions_per_week: e.target.value as '2' | '3' | '5' }))}
+                    onChange={e => setForm(f => ({ ...f, sessions_per_week: e.target.value }))}
                     className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    {(['2', '3', '5'] as const).map(n => (
+                    {(['1', '2', '3', '4', '5', '6', '7'] as const).map(n => (
                       <option key={n} value={n}>{n}x / sem ({Number(n) * 4} total)</option>
                     ))}
                   </select>

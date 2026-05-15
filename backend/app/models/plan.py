@@ -18,7 +18,7 @@ class Plan(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     # v2 fields — cobros
-    membership_type: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")  # monthly | session_based
+    membership_type: Mapped[str] = mapped_column(String(20), nullable=False, default="monthly")  # monthly | session_based | weekly_sessions
     sessions_per_week: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)
     total_sessions: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)  # calculated: sessions_per_week * 4
 
