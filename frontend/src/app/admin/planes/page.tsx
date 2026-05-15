@@ -23,7 +23,7 @@ export default function PlanesPage() {
     classes_per_week: '3',
     is_active: true,
     membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions',
-    sessions_per_week: '3' as '2' | '3' | '5',
+    sessions_per_week: '3' as string,
     space_id: '',
   })
 
@@ -72,7 +72,7 @@ export default function PlanesPage() {
       classes_per_week: String(plan.classes_per_week),
       is_active: plan.is_active,
       membership_type: (plan.membership_type || 'monthly') as 'monthly' | 'session_based' | 'weekly_sessions',
-      sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) as '2' | '3' | '5' : '3',
+      sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) : '3',
       space_id: plan.space_id || '',
     })
     setDialogOpen(true)

@@ -13,7 +13,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import type { Space, Instructor } from '@/types'
+import type { Space, Instructor, Client, PaginatedResponse } from '@/types'
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
 const SPACE_COLORS: Record<string, string> = {
@@ -361,7 +361,7 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
     return () => { if (clientSearchRef.current) clearTimeout(clientSearchRef.current) }
   }, [clientSearch])
 
-  const { data: clientResults = [] } = useQuery({
+  const { data: clientResults } = useQuery<PaginatedResponse<Client>>({
     queryKey: ['clients-search-caja', debouncedSearch],
     queryFn: () => clientsApi.list({ search: debouncedSearch, limit: 8 }),
     enabled: debouncedSearch.length >= 2,
@@ -468,9 +468,9 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
                 onFocus={() => setShowClientDropdown(true)}
                 onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
               />
-              {showClientDropdown && clientResults.items?.length > 0 && (
+              {showClientDropdown && (clientResults?.items?.length ?? 0) > 0 && (
                 <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-                  {clientResults.items.map((c) => (
+                  {clientResults?.items.map((c) => (
                     <button
                       key={c.id}
                       type="button"

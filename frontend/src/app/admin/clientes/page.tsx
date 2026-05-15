@@ -329,7 +329,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
 
     setLoading(true)
     try {
-      const payload = { ...form, birth_date: form.birth_date || null, notes: form.notes || null }
+      const payload = { ...form, birth_date: form.birth_date || undefined, notes: form.notes || undefined }
       if (clientId) {
         await clients.update(clientId, payload)
         toast.success('Cliente actualizado')
