@@ -22,6 +22,8 @@ psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_appointment_debt.
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_plan_space.sql
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_performance_indexes.sql
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_bonus_sessions.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_instructor_payment.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/create_instructors_table.sql
 set -e
 
 if [ "${ENVIRONMENT}" = "development" ]; then

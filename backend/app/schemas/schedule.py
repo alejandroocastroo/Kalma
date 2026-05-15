@@ -51,7 +51,8 @@ class GenerateSessionsRequest(BaseModel):
     skip_existing: bool = True
     open_hour: Optional[int] = Field(default=None, ge=0, le=23)
     close_hour: Optional[int] = Field(default=None, ge=0, le=23)  # inclusive: last session starts here
-    blocked_hours: List[int] = []  # horas a omitir, ej: [12, 13] para bloquear 12pm y 1pm
+    blocked_hours: List[int] = []         # horas a omitir, ej: [12, 13] para bloquear 12pm y 1pm
+    blocked_dates: List[date] = []        # días completos a omitir, ej: domingos o festivos
 
     @model_validator(mode="after")
     def validate_range(self) -> "GenerateSessionsRequest":

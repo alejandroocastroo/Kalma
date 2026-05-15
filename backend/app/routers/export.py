@@ -236,12 +236,18 @@ def _build_resumen(ws, payments: list[Payment], tenant_name: str, start: str, en
     _autofit(ws)
 
 
-def _build_detalle(ws, payments: list[Payment], tipo: str, client_names: dict, space_names: dict):
+def _build_detalle(ws, payments: list[Payment], tipo: str, client_names: dict, space_names: dict, instructor_names: dict = None):
     """Hoja 2/3: Detalle de ingresos o egresos."""
     ws.freeze_panes = "A2"
     filtrado = [p for p in payments if p.type == tipo]
+    is_expense = tipo == "expense"
 
-    headers = ["Fecha", "Descripción", "Cliente", "Categoría", "Espacio", "Método de pago", "Monto (COP)"]
+    if is_expense:
+        headers = ["Fecha", "Descripción", "Cliente", "Instructor", "Categoría", "Espacio", "Método de pago", "Monto (COP)"]
+    else:
+        headers = ["Fecha", "Descripción", "Cliente", "Categoría", "Espacio", "Método de pago", "Monto (COP)"]
+    monto_col = len(headers)
+
     for c, h in enumerate(headers, 1):
         ws.cell(row=1, column=c, value=h)
     _style_header_row(ws, 1, len(headers))
@@ -249,21 +255,34 @@ def _build_detalle(ws, payments: list[Payment], tipo: str, client_names: dict, s
     total = Decimal(0)
     for i, p in enumerate(filtrado, 2):
         space = space_names.get(p.space_id, "General") if p.space_id else "General"
-        values = [
-            p.payment_date.strftime("%d/%m/%Y") if p.payment_date else "",
-            p.description or "",
-            client_names.get(p.client_id, "") if p.client_id else "",
-            CATEGORY_LABELS.get(p.category, p.category),
-            space,
-            METHOD_LABELS.get(p.payment_method, p.payment_method),
-            _cop(p.amount),
-        ]
+        instructor_name = (instructor_names or {}).get(p.instructor_id, "—") if p.instructor_id else "—"
+        if is_expense:
+            values = [
+                p.payment_date.strftime("%d/%m/%Y") if p.payment_date else "",
+                p.description or "",
+                client_names.get(p.client_id, "—") if p.client_id else "—",
+                instructor_name,
+                CATEGORY_LABELS.get(p.category, p.category),
+                space,
+                METHOD_LABELS.get(p.payment_method, p.payment_method),
+                _cop(p.amount),
+            ]
+        else:
+            values = [
+                p.payment_date.strftime("%d/%m/%Y") if p.payment_date else "",
+                p.description or "",
+                client_names.get(p.client_id, "") if p.client_id else "",
+                CATEGORY_LABELS.get(p.category, p.category),
+                space,
+                METHOD_LABELS.get(p.payment_method, p.payment_method),
+                _cop(p.amount),
+            ]
         for c, v in enumerate(values, 1):
             cell = ws.cell(row=i, column=c, value=v)
             cell.border = _THIN_BORDER
             cell.font = _font(10)
-            cell.alignment = _align("right") if c == 7 else _align("left")
-            if c == 7:
+            cell.alignment = _align("right") if c == monto_col else _align("left")
+            if c == monto_col:
                 cell.number_format = '#,##0'
             if i % 2 == 0:
                 cell.fill = _fill("F5F5F5")
@@ -273,13 +292,14 @@ def _build_detalle(ws, payments: list[Payment], tipo: str, client_names: dict, s
     bg = "C8E6C9" if tipo == "income" else "FFCDD2"
     txt_color = "1B5E20" if tipo == "income" else "B71C1C"
     _style_total_row(ws, total_row, len(headers), bg=bg)
-    ws.merge_cells(f"A{total_row}:F{total_row}")
+    merge_end = chr(ord('A') + monto_col - 2)  # column letter before monto
+    ws.merge_cells(f"A{total_row}:{merge_end}{total_row}")
     ws[f"A{total_row}"] = "TOTAL"
     ws[f"A{total_row}"].font = _font(10, bold=True)
     ws[f"A{total_row}"].alignment = _align("right")
     ws[f"A{total_row}"].fill = _fill(bg)
     ws[f"A{total_row}"].border = _THIN_BORDER
-    cell = ws.cell(row=total_row, column=7, value=_cop(total))
+    cell = ws.cell(row=total_row, column=monto_col, value=_cop(total))
     cell.number_format = '#,##0'
     cell.font = _font(11, bold=True, color=txt_color)
     cell.alignment = _align("right")
@@ -463,6 +483,13 @@ async def export_contabilidad(
         clients_result = await db.execute(select(Client).where(Client.id.in_(list(client_ids))))
         client_names = {c.id: c.full_name for c in clients_result.scalars().all()}
 
+    from app.models.instructor import Instructor as InstructorModel
+    instructor_ids = {p.instructor_id for p in payments_list if p.instructor_id}
+    instructor_names: dict[uuid.UUID, str] = {}
+    if instructor_ids:
+        inst_result = await db.execute(select(InstructorModel).where(InstructorModel.id.in_(list(instructor_ids))))
+        instructor_names = {i.id: i.full_name for i in inst_result.scalars().all()}
+
     tenant = await db.get(Tenant, current_user.tenant_id)
     tenant_name = tenant.name if tenant else "Estudio"
 
@@ -476,7 +503,7 @@ async def export_contabilidad(
 
     _build_resumen(ws_resumen, payments_list, tenant_name, start or "—", end or "—", space_names)
     _build_detalle(ws_ingresos, payments_list, "income", client_names, space_names)
-    _build_detalle(ws_egresos, payments_list, "expense", client_names, space_names)
+    _build_detalle(ws_egresos, payments_list, "expense", client_names, space_names, instructor_names)
     _build_kpis(ws_kpis, payments_list, space_names)
     _build_por_espacio(ws_espacios, payments_list, space_names)
 

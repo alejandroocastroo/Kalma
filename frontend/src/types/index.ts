@@ -116,9 +116,10 @@ export type PaymentType = 'income' | 'expense'
 export interface Payment {
   id: string
   tenant_id: string
-  client_id?: string
+  client_id?: string | null
   appointment_id?: string
   space_id?: string
+  instructor_id?: string | null
   space_name?: string
   amount: number
   type: PaymentType
@@ -127,7 +128,32 @@ export interface Payment {
   description?: string
   payment_date: string
   client_name?: string
+  instructor_name?: string | null
   created_at: string
+}
+
+export interface Instructor {
+  id: string
+  email?: string | null
+  full_name: string
+  phone?: string
+  role: 'instructor'
+  is_active: boolean
+  tenant_id?: string
+  created_at: string
+  sessions_count: number
+  sessions_this_month: number
+}
+
+export interface InstructorSession {
+  id: string
+  start_datetime: string
+  end_datetime: string
+  space_name?: string
+  class_type_name?: string
+  status: string
+  enrolled_count: number
+  capacity: number
 }
 
 export interface SpaceSummary {

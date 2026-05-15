@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classSessions, appointments, spaces, clients, classTypes, memberships, apiClient } from '@/lib/api'
+import { classSessions, appointments, spaces, clients, classTypes, memberships, instructors as instructorsApi, apiClient } from '@/lib/api'
 import { SessionCard } from '@/components/admin/session-card'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus, Penc
 import { format, addWeeks, subWeeks, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
-import type { ClassSession, Client as ClientType } from '@/types'
+import type { ClassSession, Client as ClientType, Instructor } from '@/types'
 
 // ClassSession may carry space_id from the backend even if not yet in the shared type
 type SessionWithSpace = ClassSession & { space_id?: string | null }
@@ -64,6 +64,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const [classTypeId, setClassTypeId] = useState('')
   const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
+  const [instructorId, setInstructorId] = useState('')
   const [clientSearch, setClientSearch] = useState('')
   const [selectedClient, setSelectedClient] = useState<ClientType | null>(null)
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
@@ -84,6 +85,11 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
   const { data: classTypeList = [] } = useQuery({
     queryKey: ['class-types'],
     queryFn: classTypes.list,
+  })
+
+  const { data: instructorList = [] } = useQuery({
+    queryKey: ['instructors'],
+    queryFn: instructorsApi.list,
   })
 
   const selectedClassType = classTypeList.find((ct) => ct.id === classTypeId) ?? null
@@ -129,6 +135,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
         ...(classTypeId && { class_type_id: classTypeId }),
         ...(customName.trim() && { custom_name: customName.trim() }),
         ...(selectedClassType && { capacity: selectedClassType.capacity }),
+        ...(instructorId && { instructor_id: instructorId }),
       })
 
       if (selectedClient) {
@@ -345,6 +352,25 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
         </select>
       </div>
 
+      {/* Instructor selector — optional */}
+      {instructorList.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Instructor (opcional)
+          </label>
+          <select
+            value={instructorId}
+            onChange={(e) => setInstructorId(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+          >
+            <option value="">Sin asignar</option>
+            {instructorList.map((i: Instructor) => (
+              <option key={i.id} value={i.id}>{i.full_name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       {/* Client search — optional, books on creation */}
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -463,10 +489,16 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
     queryFn: classTypes.list,
   })
 
+  const { data: instructorList = [] } = useQuery({
+    queryKey: ['instructors'],
+    queryFn: instructorsApi.list,
+  })
+
   const today = format(new Date(), 'yyyy-MM-dd')
   const [classTypeId, setClassTypeId] = useState('')
   const [customName, setCustomName] = useState('')
   const [spaceId, setSpaceId] = useState('')
+  const [instructorId, setInstructorId] = useState('')
   const [date, setDate] = useState(today)
   const [selectedHour, setSelectedHour] = useState<number | null>(null)
   // Duration mode: 'fixed' = 60 min, 'custom' = choose
@@ -504,6 +536,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
         ...(classTypeId && { class_type_id: classTypeId }),
         ...(customName.trim() && { custom_name: customName.trim() }),
         ...(selectedClassType && { capacity: selectedClassType.capacity }),
+        ...(instructorId && { instructor_id: instructorId }),
       })
       toast.success('Sesión creada')
       onClose()
@@ -574,6 +607,25 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
           ))}
         </select>
       </div>
+
+      {/* Instructor selector — optional */}
+      {instructorList.length > 0 && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Instructor (opcional)
+          </label>
+          <select
+            value={instructorId}
+            onChange={(e) => setInstructorId(e.target.value)}
+            className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
+          >
+            <option value="">Sin asignar</option>
+            {instructorList.map((i: Instructor) => (
+              <option key={i.id} value={i.id}>{i.full_name}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {/* Date */}
       <div>
@@ -737,6 +789,11 @@ export default function AgendaPage() {
       (s.space_id && spaceColorMap[s.space_id]) || s.class_type_color || '#6366f1',
   })
 
+  const { data: allInstructors = [] } = useQuery({
+    queryKey: ['instructors'],
+    queryFn: instructorsApi.list,
+  })
+
   const { data: sessionAppointments = [] } = useQuery({
     queryKey: ['appointments', selectedSession?.id],
     queryFn: () => appointments.list({ session_id: selectedSession?.id }),
@@ -766,6 +823,22 @@ export default function AgendaPage() {
       toast.success('Nombre actualizado')
     },
     onError: () => toast.error('Error al actualizar el nombre'),
+  })
+
+  // ── Update instructor ─────────────────────────────────────────────────────
+  const updateInstructorMutation = useMutation({
+    mutationFn: ({ id, instructor_id }: { id: string; instructor_id: string | null }) =>
+      classSessions.update(id, { instructor_id: instructor_id ?? undefined }),
+    onSuccess: (updated) => {
+      setSelectedSession((prev) => prev ? {
+        ...prev,
+        instructor_id: updated.instructor_id,
+        instructor_name: updated.instructor_name,
+      } : prev)
+      qc.invalidateQueries({ queryKey: ['week-sessions'] })
+      toast.success('Instructor actualizado')
+    },
+    onError: () => toast.error('Error al actualizar el instructor'),
   })
 
   // ── Remove client from session ────────────────────────────────────────────
@@ -1079,10 +1152,25 @@ export default function AgendaPage() {
                   </p>
                 </div>
                 <div>
-                  <p className="text-gray-500">Instructor</p>
-                  <p className="font-medium">
-                    {selectedSession.instructor_name || 'Sin asignar'}
-                  </p>
+                  <p className="text-gray-500 mb-1">Instructor</p>
+                  {allInstructors.length > 0 ? (
+                    <select
+                      value={(selectedSession as any).instructor_id || ''}
+                      onChange={(e) => updateInstructorMutation.mutate({
+                        id: selectedSession.id,
+                        instructor_id: e.target.value || null,
+                      })}
+                      disabled={updateInstructorMutation.isPending}
+                      className="text-sm px-2 py-1.5 rounded-lg border border-gray-200 bg-white disabled:opacity-50"
+                    >
+                      <option value="">Sin asignar</option>
+                      {allInstructors.map((i: Instructor) => (
+                        <option key={i.id} value={i.id}>{i.full_name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="font-medium text-sm">{selectedSession.instructor_name || 'Sin asignar'}</p>
+                  )}
                 </div>
                 <div>
                   <p className="text-gray-500">Capacidad</p>

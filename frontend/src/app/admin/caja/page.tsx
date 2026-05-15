@@ -1,7 +1,7 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { payments, spaces as spacesApi } from '@/lib/api'
+import { payments, spaces as spacesApi, clients as clientsApi, instructors as instructorsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -13,7 +13,7 @@ import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
-import type { Space } from '@/types'
+import type { Space, Instructor } from '@/types'
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
 const SPACE_COLORS: Record<string, string> = {
@@ -261,8 +261,15 @@ export default function CajaPage() {
                     <TableRow key={p.id}>
                       <TableCell className="text-gray-500 text-xs whitespace-nowrap">{p.payment_date}</TableCell>
                       <TableCell>
-                        <p className="text-sm font-medium">{p.description || '—'}</p>
-                        {p.client_name && <p className="text-xs text-gray-500">{p.client_name}</p>}
+                        <p className="text-sm font-medium">
+                          {p.description || p.instructor_name || p.client_name || '—'}
+                        </p>
+                        {p.description && p.client_name && (
+                          <p className="text-xs text-gray-500">{p.client_name}</p>
+                        )}
+                        {p.description && p.instructor_name && (
+                          <p className="text-xs text-gray-500">{p.instructor_name}</p>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-gray-600">{categoryLabels[p.category] || p.category}</TableCell>
                       <TableCell>
@@ -316,6 +323,7 @@ export default function CajaPage() {
           <PaymentForm type="expense" spaces={spacesList} onClose={() => { setShowExpense(false); invalidate() }} />
         </DialogContent>
       </Dialog>
+
     </div>
   )
 }
@@ -337,15 +345,37 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
     description: '',
     payment_date: format(new Date(), 'yyyy-MM-dd'),
     space_id: '',
+    client_id: '',
+    client_name_display: '',
+    instructor_id: '',
   })
   const [loading, setLoading] = useState(false)
+  const [clientSearch, setClientSearch] = useState('')
+  const [showClientDropdown, setShowClientDropdown] = useState(false)
+  const clientSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+
+  useEffect(() => {
+    if (clientSearchRef.current) clearTimeout(clientSearchRef.current)
+    clientSearchRef.current = setTimeout(() => setDebouncedSearch(clientSearch), 300)
+    return () => { if (clientSearchRef.current) clearTimeout(clientSearchRef.current) }
+  }, [clientSearch])
+
+  const { data: clientResults = [] } = useQuery({
+    queryKey: ['clients-search-caja', debouncedSearch],
+    queryFn: () => clientsApi.list({ search: debouncedSearch, limit: 8 }),
+    enabled: debouncedSearch.length >= 2,
+  })
+
+  const { data: instructorList = [] } = useQuery<Instructor[]>({
+    queryKey: ['instructors'],
+    queryFn: () => instructorsApi.list(),
+    enabled: type === 'expense',
+  })
 
   const handleAmount = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digits = e.target.value.replace(/\D/g, '')
-    if (!digits) {
-      setForm((f) => ({ ...f, amountDisplay: '' }))
-      return
-    }
+    if (!digits) { setForm((f) => ({ ...f, amountDisplay: '' })); return }
     const formatted = new Intl.NumberFormat('es-CO').format(parseInt(digits, 10))
     setForm((f) => ({ ...f, amountDisplay: formatted }))
   }
@@ -367,6 +397,8 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
         description: form.description || undefined,
         payment_date: form.payment_date,
         space_id: form.space_id || undefined,
+        client_id: form.client_id || undefined,
+        instructor_id: form.instructor_id || undefined,
       } as any)
       toast.success(type === 'income' ? 'Ingreso registrado' : 'Egreso registrado')
       onClose()
@@ -376,6 +408,8 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
       setLoading(false)
     }
   }
+
+  const isNomina = form.category === 'nomina_instructores'
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
@@ -415,6 +449,66 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
           </select>
         </div>
       </div>
+
+      {/* Cliente opcional — solo para ingresos */}
+      {type === 'income' && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Cliente <span className="text-gray-400 font-normal">(opcional)</span></label>
+          {form.client_id ? (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-emerald-200 bg-emerald-50 text-sm text-emerald-800">
+              <span className="flex-1 truncate">{form.client_name_display}</span>
+              <button type="button" className="text-emerald-500 hover:text-emerald-700 text-xs" onClick={() => setForm(f => ({ ...f, client_id: '', client_name_display: '' }))}>✕</button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Input
+                placeholder="Buscar cliente por nombre..."
+                value={clientSearch}
+                onChange={e => { setClientSearch(e.target.value); setShowClientDropdown(true) }}
+                onFocus={() => setShowClientDropdown(true)}
+                onBlur={() => setTimeout(() => setShowClientDropdown(false), 150)}
+              />
+              {showClientDropdown && clientResults.items?.length > 0 && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                  {clientResults.items.map((c) => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                      onMouseDown={() => {
+                        setForm(f => ({ ...f, client_id: c.id, client_name_display: c.full_name }))
+                        setClientSearch('')
+                        setShowClientDropdown(false)
+                      }}
+                    >
+                      {c.full_name}
+                      {c.phone && <span className="text-gray-400 ml-2 text-xs">{c.phone}</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Instructor opcional — solo para egresos de nómina */}
+      {type === 'expense' && isNomina && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Instructor <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <select
+            className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            value={form.instructor_id}
+            onChange={f('instructor_id')}
+          >
+            <option value="">Sin instructor específico</option>
+            {instructorList.map((ins) => (
+              <option key={ins.id} value={ins.id}>{ins.full_name}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1">Espacio</label>
         <select

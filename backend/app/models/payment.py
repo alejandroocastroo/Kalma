@@ -24,7 +24,9 @@ class Payment(Base, TimestampMixin):
     created_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
 
     space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True)
+    instructor_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("instructors.id"), nullable=True)
 
     client = relationship("Client", lazy="noload")
     created_by_user = relationship("User", lazy="noload")
+    instructor = relationship("Instructor", lazy="noload")
     space = relationship("Space", lazy="noload")

@@ -12,6 +12,7 @@ from app.schemas.payment import PaymentCreate, PaymentUpdate, PaymentResponse, C
 from app.models.payment import Payment
 from app.models.client import Client
 from app.models.space import Space
+from app.models.instructor import Instructor
 
 router = APIRouter(prefix="/payments", tags=["Pagos / Caja"])
 
@@ -26,6 +27,10 @@ async def _enrich(p: Payment, db: AsyncSession) -> dict:
         space = await db.get(Space, p.space_id)
         if space:
             data["space_name"] = space.name
+    if p.instructor_id:
+        instructor = await db.get(Instructor, p.instructor_id)
+        if instructor:
+            data["instructor_name"] = instructor.full_name
     return data
 
 

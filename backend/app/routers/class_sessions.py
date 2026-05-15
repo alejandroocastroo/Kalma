@@ -21,7 +21,7 @@ from app.models.class_type import ClassType
 from app.models.space import Space
 from app.models.appointment import Appointment
 from app.models.client import Client
-from app.models.user import User
+from app.models.instructor import Instructor
 
 router = APIRouter(prefix="/class-sessions", tags=["Sesiones de Clase"])
 
@@ -41,7 +41,7 @@ async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
                 data["class_type_name"] = space.name
                 data["class_type_color"] = data.get("class_type_color") or "#6366f1"
     if session.instructor_id:
-        instructor = await db.get(User, session.instructor_id)
+        instructor = await db.get(Instructor, session.instructor_id)
         if instructor:
             data["instructor_name"] = instructor.full_name
     # custom_name overrides the display name if set
@@ -320,7 +320,7 @@ async def update_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
-    for field, value in body.model_dump(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_unset=True).items():
         setattr(session, field, value)
     await db.commit()
     await db.refresh(session)

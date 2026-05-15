@@ -9,6 +9,7 @@ class PaymentCreate(BaseModel):
     client_id: Optional[uuid.UUID] = None
     appointment_id: Optional[uuid.UUID] = None
     space_id: Optional[uuid.UUID] = None
+    instructor_id: Optional[uuid.UUID] = None
     amount: Decimal
     type: str  # income, expense
     category: str
@@ -25,6 +26,7 @@ class PaymentUpdate(BaseModel):
     description: Optional[str] = None
     payment_date: Optional[date] = None
     space_id: Optional[uuid.UUID] = None
+    instructor_id: Optional[uuid.UUID] = None
 
 
 class PaymentResponse(BaseModel):
@@ -33,6 +35,7 @@ class PaymentResponse(BaseModel):
     client_id: Optional[uuid.UUID] = None
     appointment_id: Optional[uuid.UUID] = None
     space_id: Optional[uuid.UUID] = None
+    instructor_id: Optional[uuid.UUID] = None
     amount: Decimal
     type: str
     category: str
@@ -40,6 +43,7 @@ class PaymentResponse(BaseModel):
     description: Optional[str] = None
     payment_date: date
     client_name: Optional[str] = None
+    instructor_name: Optional[str] = None
     space_name: Optional[str] = None
     created_at: datetime
 

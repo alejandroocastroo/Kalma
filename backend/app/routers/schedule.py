@@ -287,8 +287,12 @@ async def generate_sessions(
 
     current_date = body.from_date
     delta = timedelta(days=1)
+    blocked_date_set = set(body.blocked_dates or [])
 
     while current_date <= body.to_date:
+        if current_date in blocked_date_set:
+            current_date += delta
+            continue
         dates_processed += 1
 
         # close_hour is inclusive: last session STARTS at close_hour

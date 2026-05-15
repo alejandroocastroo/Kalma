@@ -4,7 +4,8 @@ import type {
   LoginRequest, TokenResponse, ClassType, ClassSession, Client,
   Appointment, Payment, CashFlowSummary, PaginatedResponse, TenantPublic, PublicSession,
   Space, SlotAvailability, RevenueReport, OccupancyReport,
-  Plan, ClientMembership, MembershipsListResponse, WeeklyStats, AutoBookResult, CobrosClient
+  Plan, ClientMembership, MembershipsListResponse, WeeklyStats, AutoBookResult, CobrosClient,
+  Instructor, InstructorSession
 } from '@/types'
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -98,7 +99,7 @@ export const classSessions = {
   week: () => apiClient.get<ClassSession[]>('/class-sessions/week').then((r) => r.data),
   create: (data: Partial<ClassSession>) =>
     apiClient.post<ClassSession>('/class-sessions', data).then((r) => r.data),
-  update: (id: string, data: Partial<ClassSession>) =>
+  update: (id: string, data: Partial<ClassSession> & { instructor_id?: string | null }) =>
     apiClient.put<ClassSession>(`/class-sessions/${id}`, data).then((r) => r.data),
   cancel: (id: string) =>
     apiClient.post(`/class-sessions/${id}/cancel`).then((r) => r.data),
@@ -206,6 +207,7 @@ export const schedule = {
     open_hour?: number
     close_hour?: number
     blocked_hours?: number[]
+    blocked_dates?: string[]
   }) => apiClient.post('/schedule/generate', data).then((r) => r.data),
 }
 
@@ -246,6 +248,17 @@ export const memberships = {
     apiClient.post(`/memberships/${membershipId}/makeups`, data).then(r => r.data),
   listMakeups: (membershipId: string) =>
     apiClient.get(`/memberships/${membershipId}/makeups`).then(r => r.data),
+}
+
+// ── Instructors ───────────────────────────────────────────────
+export const instructors = {
+  list: () => apiClient.get<Instructor[]>('/instructors').then(r => r.data),
+  create: (data: { full_name: string; email?: string; phone?: string }) =>
+    apiClient.post<Instructor>('/instructors', data).then(r => r.data),
+  update: (id: string, data: { full_name?: string; phone?: string; email?: string; is_active?: boolean }) =>
+    apiClient.put<Instructor>(`/instructors/${id}`, data).then(r => r.data),
+  sessions: (id: string) =>
+    apiClient.get<InstructorSession[]>(`/instructors/${id}/sessions`).then(r => r.data),
 }
 
 // ── Cobros ────────────────────────────────────────────────────

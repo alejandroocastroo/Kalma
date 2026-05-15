@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import {
-  LayoutDashboard, Calendar, CalendarDays, Users, DollarSign, Dumbbell, Building2, Settings, LogOut, X, CreditCard, Users2, Banknote
+  LayoutDashboard, Calendar, CalendarDays, Users, DollarSign, Dumbbell, Building2, Settings, LogOut, X, CreditCard, Users2, Banknote, GraduationCap
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { logout, getStoredUser } from '@/lib/auth'
@@ -18,6 +18,7 @@ const navItems = [
   { href: '/admin/cobros', icon: Banknote, label: 'Cobros' },
   { href: '/admin/caja', icon: DollarSign, label: 'Caja' },
   { href: '/admin/clases', icon: Dumbbell, label: 'Clases' },
+  { href: '/admin/instructores', icon: GraduationCap, label: 'Instructores' },
   { href: '/admin/espacios', icon: Building2, label: 'Espacios' },
   { href: '/admin/horarios', icon: CalendarDays, label: 'Horarios' },
 ]
