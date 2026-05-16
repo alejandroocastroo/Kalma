@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 import sqlalchemy as sa
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, func, and_, or_
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
@@ -221,7 +221,13 @@ async def list_memberships(
     if search:
         base_q = base_q.where(Client.full_name.ilike(f"%{search}%"))
     if space_id:
-        base_q = base_q.where(Plan.space_id == uuid.UUID(space_id))
+        space_uuid = uuid.UUID(space_id)
+        base_q = base_q.where(
+            or_(
+                Plan.space_id == space_uuid,
+                ClientMembership.preferred_space_id == space_uuid,
+            )
+        )
 
     # Count
     count_q = select(func.count()).select_from(base_q.subquery())

@@ -12,8 +12,8 @@ def _validate_document_number(v: Optional[str]) -> Optional[str]:
     if not v:
         return None
     digits = re.sub(r'\D', '', v)
-    if len(digits) < 9:
-        raise ValueError('El número de documento debe tener al menos 9 dígitos')
+    if len(digits) < 5:
+        raise ValueError('El número de documento debe tener al menos 5 dígitos')
     return v
 
 

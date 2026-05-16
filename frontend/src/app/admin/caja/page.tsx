@@ -502,7 +502,7 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
             onChange={f('instructor_id')}
           >
             <option value="">Sin instructor específico</option>
-            {instructorList.map((ins) => (
+            {instructorList.filter(ins => ins.is_active).map((ins) => (
               <option key={ins.id} value={ins.id}>{ins.full_name}</option>
             ))}
           </select>

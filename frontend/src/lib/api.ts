@@ -109,7 +109,7 @@ export const classSessions = {
 
 // ── Clients ───────────────────────────────────────────────────
 export const clients = {
-  list: (params?: { search?: string; page?: number; limit?: number }) =>
+  list: (params?: { search?: string; page?: number; limit?: number; is_active?: boolean }) =>
     apiClient.get<PaginatedResponse<Client>>('/clients', { params }).then((r) => r.data),
   get: (id: string) => apiClient.get<Client>(`/clients/${id}`).then((r) => r.data),
   create: (data: Partial<Client>) =>

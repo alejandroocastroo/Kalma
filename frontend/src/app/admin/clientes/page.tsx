@@ -23,14 +23,20 @@ function formatBirthDate(birth_date: string): string {
 export default function ClientesPage() {
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
   const [showForm, setShowForm] = useState(false)
   const [selected, setSelected] = useState<Client | null>(null)
   const [editMode, setEditMode] = useState(false)
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
-    queryKey: ['clients', search, page],
-    queryFn: () => clients.list({ search, page, limit: 15 }),
+    queryKey: ['clients', search, page, statusFilter],
+    queryFn: () => clients.list({
+      search,
+      page,
+      limit: 15,
+      is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
+    }),
   })
 
   const { data: birthdayClients = [] } = useQuery({
@@ -53,6 +59,14 @@ export default function ClientesPage() {
 
       {/* Toolbar */}
       <div className="flex items-center gap-3">
+        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+          {(['active', 'inactive', 'all'] as const).map(s => (
+            <button key={s} onClick={() => { setStatusFilter(s); setPage(1) }}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${statusFilter === s ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              {s === 'active' ? 'Activos' : s === 'inactive' ? 'Inactivos' : 'Todos'}
+            </button>
+          ))}
+        </div>
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <Input
@@ -309,34 +323,23 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     document_number: initial?.document_number || '',
     birth_date: initial?.birth_date || '',
     notes: initial?.notes || '',
+    is_active: initial?.is_active ?? true,
   })
   const [loading, setLoading] = useState(false)
   const [docError, setDocError] = useState('')
+  const [dupeWarning, setDupeWarning] = useState<string | null>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!form.full_name) { toast.error('El nombre es requerido'); return }
+  const buildPayload = () => ({
+    ...form,
+    birth_date: form.birth_date || undefined,
+    notes: form.notes || undefined,
+  })
 
-    // Validación de cédula: mínimo 9 dígitos si se ingresa
-    if (form.document_number) {
-      const digits = form.document_number.replace(/\D/g, '')
-      if (digits.length < 9) {
-        setDocError('El número de documento debe tener al menos 9 dígitos')
-        return
-      }
-    }
-    setDocError('')
-
+  const doCreate = async () => {
     setLoading(true)
     try {
-      const payload = { ...form, birth_date: form.birth_date || undefined, notes: form.notes || undefined }
-      if (clientId) {
-        await clients.update(clientId, payload)
-        toast.success('Cliente actualizado')
-      } else {
-        await clients.create(payload)
-        toast.success('Cliente creado')
-      }
+      await clients.create(buildPayload())
+      toast.success('Cliente creado')
       onClose()
     } catch (err: any) {
       const detail = err?.response?.data?.detail
@@ -348,63 +351,135 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     } finally { setLoading(false) }
   }
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!form.full_name) { toast.error('El nombre es requerido'); return }
+
+    // Validación de cédula: mínimo 5 dígitos si se ingresa
+    if (form.document_number) {
+      const digits = form.document_number.replace(/\D/g, '')
+      if (digits.length < 5) {
+        setDocError('El número de documento debe tener al menos 5 dígitos')
+        return
+      }
+    }
+    setDocError('')
+
+    setLoading(true)
+    try {
+      if (clientId) {
+        await clients.update(clientId, { ...buildPayload(), is_active: form.is_active })
+        toast.success('Cliente actualizado')
+        onClose()
+      } else {
+        // Advertencia de nombre duplicado cuando no hay documento
+        if (!form.document_number) {
+          const existing = await clients.list({ search: form.full_name, limit: 20 })
+          const exactMatch = existing.items.find(c =>
+            c.full_name.toLowerCase().trim() === form.full_name.toLowerCase().trim()
+          )
+          if (exactMatch) {
+            setDupeWarning(form.full_name)
+            setLoading(false)
+            return
+          }
+        }
+        // doCreate manages its own loading state
+        setLoading(false)
+        await doCreate()
+      }
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail
+      if (err?.response?.status === 409) {
+        setDocError(typeof detail === 'string' ? detail : 'Ya existe un cliente con ese número de documento')
+      } else {
+        toast.error(typeof detail === 'string' ? detail : 'Error al guardar')
+      }
+      setLoading(false)
+    }
+  }
+
   const f = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setForm({ ...form, [field]: e.target.value })
     if (field === 'document_number') setDocError('')
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
-        <Input placeholder="Valentina Torres" value={form.full_name} onChange={f('full_name')} />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
+    <>
+      <form onSubmit={handleSubmit} className="space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
-          <Input placeholder="+573001234567" value={form.phone} onChange={f('phone')} />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo *</label>
+          <Input placeholder="Valentina Torres" value={form.full_name} onChange={f('full_name')} />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Teléfono</label>
+            <Input placeholder="+573001234567" value={form.phone} onChange={f('phone')} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+            <Input type="email" placeholder="correo@ejemplo.com" value={form.email} onChange={f('email')} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Tipo doc.</label>
+            <select className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm" value={form.document_type} onChange={f('document_type')}>
+              <option value="CC">CC</option><option value="CE">CE</option><option value="Passport">Pasaporte</option><option value="NIT">NIT</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Nro. documento</label>
+            <Input
+              placeholder="1234567890"
+              value={form.document_number}
+              onChange={f('document_number')}
+              className={docError ? 'border-red-400 focus-visible:ring-red-400' : ''}
+            />
+            {docError && <p className="mt-1 text-xs text-red-500">{docError}</p>}
+          </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <Input type="email" placeholder="correo@ejemplo.com" value={form.email} onChange={f('email')} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tipo doc.</label>
-          <select className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm" value={form.document_type} onChange={f('document_type')}>
-            <option value="CC">CC</option><option value="CE">CE</option><option value="Passport">Pasaporte</option><option value="NIT">NIT</option>
-          </select>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <Input type="date" value={form.birth_date} onChange={f('birth_date')} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Nro. documento</label>
-          <Input
-            placeholder="1234567890"
-            value={form.document_number}
-            onChange={f('document_number')}
-            className={docError ? 'border-red-400 focus-visible:ring-red-400' : ''}
+          <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400 font-normal">(lesiones, cirugías, restricciones)</span></label>
+          <textarea
+            value={form.notes}
+            onChange={f('notes')}
+            placeholder="Ej: operada de rodilla derecha, no puede hacer flexiones de cadera completas..."
+            rows={3}
+            className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
-          {docError && <p className="mt-1 text-xs text-red-500">{docError}</p>}
         </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento <span className="text-gray-400 font-normal">(opcional)</span></label>
-        <Input type="date" value={form.birth_date} onChange={f('birth_date')} />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400 font-normal">(lesiones, cirugías, restricciones)</span></label>
-        <textarea
-          value={form.notes}
-          onChange={f('notes')}
-          placeholder="Ej: operada de rodilla derecha, no puede hacer flexiones de cadera completas..."
-          rows={3}
-          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-        />
-      </div>
-      <div className="flex gap-2 pt-2">
-        <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : clientId ? 'Actualizar' : 'Crear cliente'}</Button>
-        <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
-      </div>
-    </form>
+        {clientId && (
+          <div className="flex items-center gap-3">
+            <input id="is_active" type="checkbox" checked={form.is_active ?? true}
+              onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+              className="w-4 h-4 accent-primary-600" />
+            <label htmlFor="is_active" className="text-sm text-gray-700">Cliente activo</label>
+          </div>
+        )}
+        <div className="flex gap-2 pt-2">
+          <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : clientId ? 'Actualizar' : 'Crear cliente'}</Button>
+          <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
+        </div>
+      </form>
+
+      <Dialog open={!!dupeWarning} onOpenChange={() => setDupeWarning(null)}>
+        <DialogContent title="Nombre duplicado">
+          <p className="text-sm text-gray-700">
+            Ya existe un cliente llamado <strong>{dupeWarning}</strong>. Si son personas distintas, puedes agregar el número de documento para diferenciarlos.
+          </p>
+          <div className="flex gap-2 mt-4">
+            <Button onClick={async () => { setDupeWarning(null); await doCreate() }}>
+              Continuar de todas formas
+            </Button>
+            <Button variant="outline" onClick={() => setDupeWarning(null)}>Cancelar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }

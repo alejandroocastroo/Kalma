@@ -96,7 +96,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
 
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
-    queryFn: () => clients.list({ limit: 100 }),
+    queryFn: () => clients.list({ limit: 100, is_active: true }),
   })
   const allClients = clientsData?.items ?? []
 
@@ -353,7 +353,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
       </div>
 
       {/* Instructor selector — optional */}
-      {instructorList.length > 0 && (
+      {instructorList.filter((i: Instructor) => i.is_active).length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Instructor (opcional)
@@ -364,7 +364,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
             className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
           >
             <option value="">Sin asignar</option>
-            {instructorList.map((i: Instructor) => (
+            {instructorList.filter((i: Instructor) => i.is_active).map((i: Instructor) => (
               <option key={i.id} value={i.id}>{i.full_name}</option>
             ))}
           </select>
@@ -609,7 +609,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
       </div>
 
       {/* Instructor selector — optional */}
-      {instructorList.length > 0 && (
+      {instructorList.filter((i: Instructor) => i.is_active).length > 0 && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Instructor (opcional)
@@ -620,7 +620,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
             className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm"
           >
             <option value="">Sin asignar</option>
-            {instructorList.map((i: Instructor) => (
+            {instructorList.filter((i: Instructor) => i.is_active).map((i: Instructor) => (
               <option key={i.id} value={i.id}>{i.full_name}</option>
             ))}
           </select>
@@ -825,6 +825,9 @@ export default function AgendaPage() {
     onError: () => toast.error('Error al actualizar el nombre'),
   })
 
+  // ── Delete session confirmation ───────────────────────────────────────────
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+
   // ── Update instructor ─────────────────────────────────────────────────────
   const updateInstructorMutation = useMutation({
     mutationFn: ({ id, instructor_id }: { id: string; instructor_id: string | null }) =>
@@ -871,7 +874,7 @@ export default function AgendaPage() {
 
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
-    queryFn: () => clients.list({ limit: 100 }),
+    queryFn: () => clients.list({ limit: 100, is_active: true }),
   })
   const allClients = clientsData?.items ?? []
 
@@ -1087,6 +1090,7 @@ export default function AgendaPage() {
             setAddClientSearch('')
             setEditingName(false)
             setEditNameValue('')
+            setShowDeleteConfirm(false)
           }
         }}
       >
@@ -1153,7 +1157,7 @@ export default function AgendaPage() {
                 </div>
                 <div>
                   <p className="text-gray-500 mb-1">Instructor</p>
-                  {allInstructors.length > 0 ? (
+                  {allInstructors.filter((i: Instructor) => i.is_active).length > 0 ? (
                     <select
                       value={(selectedSession as any).instructor_id || ''}
                       onChange={(e) => updateInstructorMutation.mutate({
@@ -1164,7 +1168,7 @@ export default function AgendaPage() {
                       className="text-sm px-2 py-1.5 rounded-lg border border-gray-200 bg-white disabled:opacity-50"
                     >
                       <option value="">Sin asignar</option>
-                      {allInstructors.map((i: Instructor) => (
+                      {allInstructors.filter((i: Instructor) => i.is_active).map((i: Instructor) => (
                         <option key={i.id} value={i.id}>{i.full_name}</option>
                       ))}
                     </select>
@@ -1342,7 +1346,14 @@ export default function AgendaPage() {
                 <Button
                   variant="destructive"
                   size="sm"
-                  onClick={() => cancelMutation.mutate(selectedSession.id)}
+                  onClick={() => {
+                    if (selectedSession.enrolled_count > 0) {
+                      setShowDeleteConfirm(true)
+                    } else {
+                      cancelMutation.mutate(selectedSession.id)
+                    }
+                  }}
+                  disabled={cancelMutation.isPending}
                 >
                   Eliminar sesión
                 </Button>
@@ -1352,6 +1363,37 @@ export default function AgendaPage() {
                   </Button>
                 </DialogClose>
               </div>
+
+              {/* Confirm delete when clients are enrolled */}
+              <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+                <DialogContent title="¿Eliminar sesión?">
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-700">
+                      Esta sesión tiene{' '}
+                      <span className="font-semibold text-red-600">
+                        {selectedSession.enrolled_count} cliente{selectedSession.enrolled_count !== 1 ? 's' : ''} registrado{selectedSession.enrolled_count !== 1 ? 's' : ''}
+                      </span>
+                      . Al eliminarla se borrarán también sus inscripciones. ¿Deseas continuar?
+                    </p>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        disabled={cancelMutation.isPending}
+                        onClick={() => {
+                          setShowDeleteConfirm(false)
+                          cancelMutation.mutate(selectedSession.id)
+                        }}
+                      >
+                        {cancelMutation.isPending ? 'Eliminando...' : 'Sí, eliminar'}
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setShowDeleteConfirm(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </div>
           )}
         </DialogContent>

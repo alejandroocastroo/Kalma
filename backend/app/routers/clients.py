@@ -23,12 +23,15 @@ async def list_clients(
     search: Optional[str] = Query(None, max_length=100),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
+    is_active: Optional[bool] = Query(None),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
-    q = select(Client).where(Client.tenant_id == current_user.tenant_id, Client.is_active == True)
+    q = select(Client).where(Client.tenant_id == current_user.tenant_id)
+    if is_active is not None:
+        q = q.where(Client.is_active == is_active)
     if search:
         q = q.where(
             or_(

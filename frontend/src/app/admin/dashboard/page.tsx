@@ -30,7 +30,7 @@ export default function DashboardPage() {
 
   const { data: clientsData, isLoading: loadingClients } = useQuery({
     queryKey: ['clients-count'],
-    queryFn: () => clients.list({ limit: 1 }),
+    queryFn: () => clients.list({ limit: 1, is_active: true }),
   })
 
   const { data: recentAppointments, isLoading: loadingAppts } = useQuery({
