@@ -248,6 +248,8 @@ export const memberships = {
     apiClient.post(`/memberships/${membershipId}/makeups`, data).then(r => r.data),
   listMakeups: (membershipId: string) =>
     apiClient.get(`/memberships/${membershipId}/makeups`).then(r => r.data),
+  renew: (id: string, start_date: string) =>
+    apiClient.post<ClientMembership>(`/memberships/${id}/renew`, { start_date }).then(r => r.data),
 }
 
 // ── Instructors ───────────────────────────────────────────────

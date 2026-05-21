@@ -3,6 +3,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import Optional
+from decimal import Decimal
+from datetime import date
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
@@ -12,6 +15,8 @@ from app.models.class_session import ClassSession
 from app.models.client import Client
 from app.models.class_type import ClassType
 from app.models.client_membership import ClientMembership
+from app.models.payment import Payment
+from app.models.space import Space
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
@@ -193,21 +198,48 @@ async def confirm_whatsapp(appt_id: str, db: AsyncSession = Depends(get_db), cur
     return {"message": "Confirmación WhatsApp enviada (placeholder)"}
 
 
+class MarkPaidBody(BaseModel):
+    amount: Decimal
+    payment_method: str
+
+
 @router.put("/{appt_id}/mark-paid")
 async def mark_appointment_paid(
     appt_id: uuid.UUID,
+    body: MarkPaidBody,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
-        select(Appointment).where(
-            and_(Appointment.id == appt_id, Appointment.tenant_id == current_user.tenant_id)
-        )
+        select(Appointment, ClassSession, Space)
+        .join(ClassSession, Appointment.class_session_id == ClassSession.id, isouter=True)
+        .join(Space, ClassSession.space_id == Space.id, isouter=True)
+        .where(and_(Appointment.id == appt_id, Appointment.tenant_id == current_user.tenant_id))
     )
-    appt = result.scalar_one_or_none()
-    if not appt:
+    row = result.one_or_none()
+    if not row:
         raise HTTPException(status_code=404, detail="Cita no encontrada")
+
+    appt, session, space = row
     appt.paid = True
     appt.is_debt = False
+
+    payment_date = session.start_datetime.date() if session and session.start_datetime else date.today()
+    space_name = space.name if space else "Sin espacio"
+
+    payment = Payment(
+        tenant_id=current_user.tenant_id,
+        client_id=appt.client_id,
+        appointment_id=appt.id,
+        space_id=space.id if space else None,
+        amount=body.amount,
+        type="income",
+        category="clase_dia",
+        payment_method=body.payment_method,
+        description=f"Clase {space_name}",
+        payment_date=payment_date,
+        created_by=current_user.id,
+    )
+    db.add(payment)
     await db.commit()
     return {"ok": True}

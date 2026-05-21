@@ -337,6 +337,52 @@ async def get_membership(
     return await _enrich(m, db)
 
 
+class RenewMembershipBody(BaseModel):
+    start_date: date
+
+
+@router.post("/{membership_id}/renew")
+async def renew_membership(
+    membership_id: str,
+    body: RenewMembershipBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    if not m or m.tenant_id != current_user.tenant_id:
+        raise HTTPException(404, "Membresía no encontrada")
+
+    m.start_date = body.start_date
+    m.sessions_used = 0
+    m.makeups_used = 0
+    m.bonus_sessions = 0
+    m.makeup_credits = 0
+    m.status = "active"
+
+    if m.membership_type == "monthly":
+        m.billing_day = body.start_date.day
+        m.next_billing_date = calculate_next_billing_date(body.start_date)
+        m.expiry_date = None
+    elif m.membership_type == "session_based":
+        total = (m.sessions_per_week or 0) * 4
+        m.total_sessions = total
+        m.next_billing_date = None
+        m.billing_day = None
+        if m.scheduled_days:
+            m.expiry_date = calculate_expiry_date(body.start_date, m.scheduled_days, total)
+        else:
+            m.expiry_date = None
+    elif m.membership_type == "weekly_sessions":
+        m.billing_day = body.start_date.day
+        m.next_billing_date = calculate_next_billing_date(body.start_date)
+        m.total_sessions = (m.sessions_per_week or 0) * 4
+        m.expiry_date = None
+
+    await db.commit()
+    await db.refresh(m)
+    return await _enrich(m, db)
+
+
 @router.put("/{membership_id}")
 async def update_membership(
     membership_id: str,

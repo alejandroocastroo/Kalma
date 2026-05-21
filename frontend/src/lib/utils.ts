@@ -89,6 +89,7 @@ export const appointmentStatusConfig: Record<string, { label: string; className:
 
 export const categoryLabels: Record<string, string> = {
   // Ingresos
+  clase_dia: 'Clase Día',
   clase_grupal: 'Clase grupal',
   clase_privada: 'Clase privada',
   paquete_sesiones: 'Paquete de sesiones',

@@ -314,6 +314,8 @@ export default function MembresiasPage() {
   const [bonusTarget, setBonusTarget] = useState<ClientMembership | null>(null)
   const [bonusQuantity, setBonusQuantity] = useState('1')
   const [bonusNotes, setBonusNotes] = useState('')
+  const [renewTarget, setRenewTarget] = useState<ClientMembership | null>(null)
+  const [renewDate, setRenewDate] = useState('')
   const [form, setForm] = useState({
     client_id: '',
     plan_id: '',
@@ -473,6 +475,19 @@ export default function MembresiasPage() {
       setBonusNotes('')
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al agregar clases'),
+  })
+
+  const renewMutation = useMutation({
+    mutationFn: ({ id, start_date }: { id: string; start_date: string }) =>
+      memberships.renew(id, start_date),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memberships'] })
+      qc.invalidateQueries({ queryKey: ['cobros'] })
+      toast.success('Membresía renovada correctamente')
+      setRenewTarget(null)
+      setRenewDate('')
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al renovar membresía'),
   })
 
   const SCHEDULED_DAYS = [
@@ -777,6 +792,17 @@ export default function MembresiasPage() {
                   >
                     <Plus className="w-3 h-3" /> Agregar clases
                   </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setRenewTarget(m)
+                      setRenewDate(format(new Date(), 'yyyy-MM-dd'))
+                    }}
+                    className="gap-1 text-xs px-2 py-1 h-auto text-blue-700 border-blue-200 hover:bg-blue-50"
+                  >
+                    <RotateCcw className="w-3 h-3" /> Renovar
+                  </Button>
                 </div>
               </div>
             </div>
@@ -1040,6 +1066,47 @@ export default function MembresiasPage() {
               className="bg-primary-600 hover:bg-primary-700 text-white"
             >
               {isSaving ? 'Guardando...' : 'Guardar'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog: Renovar membresía */}
+      <Dialog open={!!renewTarget} onOpenChange={open => { if (!open) { setRenewTarget(null); setRenewDate('') } }}>
+        <DialogContent title="Renovar membresía">
+          <div className="space-y-4 py-2">
+            <div className="space-y-1">
+              <p className="text-sm text-gray-600">
+                Cliente: <span className="font-semibold">{renewTarget?.client_name}</span>
+              </p>
+              <p className="text-sm text-gray-600">
+                Plan: <span className="font-semibold">{renewTarget?.plan_name}</span>
+              </p>
+            </div>
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
+              Se reiniciará el contador de sesiones a 0 y se recalcularán las fechas del plan.
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Fecha de inicio</label>
+              <input
+                type="date"
+                value={renewDate}
+                onChange={e => setRenewDate(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setRenewTarget(null)}>Cancelar</Button>
+            <Button
+              onClick={() => {
+                if (!renewTarget || !renewDate) return
+                renewMutation.mutate({ id: renewTarget.id, start_date: renewDate })
+              }}
+              disabled={renewMutation.isPending || !renewDate}
+              className="bg-primary-600 hover:bg-primary-700 text-white"
+            >
+              {renewMutation.isPending ? 'Renovando...' : 'Confirmar renovación'}
             </Button>
           </div>
         </DialogContent>

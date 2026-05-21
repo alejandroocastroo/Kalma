@@ -8,13 +8,21 @@ from app.models.client_membership import ClientMembership
 from app.models.plan import Plan
 from app.models.makeup_session import MakeupSession
 from app.models.appointment import Appointment
+from app.models.class_session import ClassSession
+from app.models.space import Space
 from app.utils.membership_calc import get_cobros_priority
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel
 from typing import Optional, List
 import uuid
 
 router = APIRouter(prefix="/cobros", tags=["cobros"])
+
+
+class DebtDetail(BaseModel):
+    appointment_id: uuid.UUID
+    space_name: Optional[str]
+    start_datetime: Optional[datetime]
 
 
 class CobrosClientResponse(BaseModel):
@@ -33,6 +41,9 @@ class CobrosClientResponse(BaseModel):
     membership_id: Optional[uuid.UUID]
     debt_count: int = 0
     appointment_ids_with_debt: List[uuid.UUID] = []
+    debt_details: List[DebtDetail] = []
+    # True when this card represents a single queued debt (no membership)
+    is_debt_queue: bool = False
 
 
 PRIORITY_LABELS = {
@@ -78,10 +89,12 @@ async def get_cobros(
             seen_clients[client.id] = (membership, plan, client)
 
     # ------------------------------------------------------------------ #
-    # 2. Single query for all debt appointment IDs (replaces two queries)
+    # 2. Single query for all debt appointments with space and time info
     # ------------------------------------------------------------------ #
     debt_ids_result = await db.execute(
-        select(Appointment.client_id, Appointment.id)
+        select(Appointment.client_id, Appointment.id, ClassSession.start_datetime, Space.name)
+        .join(ClassSession, Appointment.class_session_id == ClassSession.id, isouter=True)
+        .join(Space, ClassSession.space_id == Space.id, isouter=True)
         .where(
             and_(
                 Appointment.tenant_id == tenant_id,
@@ -91,8 +104,12 @@ async def get_cobros(
         )
     )
     debt_ids_map: dict[uuid.UUID, list[uuid.UUID]] = {}
-    for client_id, appt_id in debt_ids_result.all():
+    debt_details_map: dict[uuid.UUID, list[DebtDetail]] = {}
+    for client_id, appt_id, start_dt, space_name in debt_ids_result.all():
         debt_ids_map.setdefault(client_id, []).append(appt_id)
+        debt_details_map.setdefault(client_id, []).append(
+            DebtDetail(appointment_id=appt_id, space_name=space_name, start_datetime=start_dt)
+        )
 
     # ------------------------------------------------------------------ #
     # 3. Single batch query for all pending makeups
@@ -163,32 +180,34 @@ async def get_cobros(
                 membership_id=membership.id,
                 debt_count=d_count,
                 appointment_ids_with_debt=d_ids,
+                debt_details=debt_details_map.get(client_id, []),
             )
         )
 
-    # Clients with debt but NO active membership
+    # Clients with debt but NO active membership — one card per debt appointment
     for client_id, client_row in no_membership_clients.items():
-        d_count = len(debt_ids_map.get(client_id, []))
-        d_ids = debt_ids_map.get(client_id, [])
-        cobros.append(
-            CobrosClientResponse(
-                client_id=client_row.id,
-                client_name=client_row.full_name,
-                plan_name=None,
-                membership_type=None,
-                priority=1,
-                status_label=DEBT_LABEL,
-                next_billing_date=None,
-                expiry_date=None,
-                sessions_remaining=None,
-                sessions_used=None,
-                total_sessions=None,
-                has_pending_makeup=False,
-                membership_id=None,
-                debt_count=d_count,
-                appointment_ids_with_debt=d_ids,
+        for detail in debt_details_map.get(client_id, []):
+            cobros.append(
+                CobrosClientResponse(
+                    client_id=client_row.id,
+                    client_name=client_row.full_name,
+                    plan_name=None,
+                    membership_type=None,
+                    priority=1,
+                    status_label=DEBT_LABEL,
+                    next_billing_date=None,
+                    expiry_date=None,
+                    sessions_remaining=None,
+                    sessions_used=None,
+                    total_sessions=None,
+                    has_pending_makeup=False,
+                    membership_id=None,
+                    debt_count=1,
+                    appointment_ids_with_debt=[detail.appointment_id],
+                    debt_details=[detail],
+                    is_debt_queue=True,
+                )
             )
-        )
 
     # ------------------------------------------------------------------ #
     # 6. Sort: priority asc, then secondary sort

@@ -345,6 +345,12 @@ export interface ClientMembership {
   preferred_space_name?: string;
 }
 
+export interface DebtDetail {
+  appointment_id: string;
+  space_name: string | null;
+  start_datetime: string | null;
+}
+
 export interface CobrosClient {
   client_id: string;
   client_name: string;
@@ -361,6 +367,8 @@ export interface CobrosClient {
   membership_id: string | null;
   debt_count: number;
   appointment_ids_with_debt: string[];
+  debt_details: DebtDetail[];
+  is_debt_queue: boolean;
 }
 
 export interface AutoBookResult {
