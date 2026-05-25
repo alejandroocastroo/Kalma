@@ -21,6 +21,7 @@ const navItems = [
   { href: '/admin/instructores', icon: GraduationCap, label: 'Instructores' },
   { href: '/admin/espacios', icon: Building2, label: 'Espacios' },
   { href: '/admin/horarios', icon: CalendarDays, label: 'Horarios' },
+  { href: '/admin/configuracion', icon: Settings, label: 'Configuración' },
 ]
 
 interface SidebarProps {

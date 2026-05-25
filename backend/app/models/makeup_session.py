@@ -16,6 +16,7 @@ class MakeupSession(Base, TimestampMixin):
     original_date = Column(Date, nullable=False)
     makeup_date = Column(Date, nullable=True)
     class_session_id = Column(UUID(as_uuid=True), ForeignKey("class_sessions.id"), nullable=True)
+    space_id = Column(UUID(as_uuid=True), ForeignKey("spaces.id", ondelete="SET NULL"), nullable=True)
     status = Column(String(20), nullable=False, default="pending")  # pending, completed, cancelled
     notes = Column(Text, nullable=True)
 

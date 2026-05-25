@@ -1,7 +1,13 @@
 import uuid
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from typing import List, Optional
+from pydantic import BaseModel, ConfigDict, Field
+
+
+class SpaceQuota(BaseModel):
+    space_id: uuid.UUID
+    sessions_per_week: int = Field(ge=1, le=7)
+    scheduled_days: Optional[List[str]] = None  # solo para hybrid_fixed
 
 
 class PlanCreate(BaseModel):
@@ -10,9 +16,10 @@ class PlanCreate(BaseModel):
     price_cop: int
     classes_per_week: int
     is_active: bool = True
-    membership_type: str = "monthly"        # monthly | session_based
+    membership_type: str = "monthly"  # monthly | session_based | weekly_sessions | hybrid_fixed | hybrid_monthly
     sessions_per_week: Optional[int] = None
     space_id: Optional[uuid.UUID] = None
+    space_quotas: Optional[List[SpaceQuota]] = None
 
 
 class PlanUpdate(BaseModel):
@@ -24,6 +31,7 @@ class PlanUpdate(BaseModel):
     membership_type: Optional[str] = None
     sessions_per_week: Optional[int] = None
     space_id: Optional[uuid.UUID] = None
+    space_quotas: Optional[List[SpaceQuota]] = None
 
 
 class PlanResponse(BaseModel):
@@ -39,6 +47,7 @@ class PlanResponse(BaseModel):
     total_sessions: Optional[int]
     space_id: Optional[uuid.UUID]
     space_name: Optional[str] = None
+    space_quotas: Optional[List[SpaceQuota]] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

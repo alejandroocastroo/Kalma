@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import String, Text, Integer, SmallInteger, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 from app.models.base import TimestampMixin
 
@@ -23,6 +23,7 @@ class Plan(Base, TimestampMixin):
     total_sessions: Mapped[int | None] = mapped_column(SmallInteger, nullable=True)  # calculated: sessions_per_week * 4
 
     space_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("spaces.id"), nullable=True)
+    space_quotas: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{"space_id": "uuid", "sessions_per_week": int}, ...]
 
     memberships = relationship("ClientMembership", back_populates="plan", lazy="noload")
     space = relationship("Space", lazy="noload")

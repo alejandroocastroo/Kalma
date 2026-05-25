@@ -11,6 +11,9 @@ from app.models.studio_schedule import StudioSchedule
 from app.models.schedule_exception import ScheduleException
 from app.models.class_session import ClassSession
 from app.models.space import Space
+from app.models.appointment import Appointment
+from app.models.client import Client
+from app.models.class_type import ClassType
 from app.schemas.schedule import (
     DAY_NAMES_ES,
     ScheduleDay,
@@ -337,3 +340,165 @@ async def generate_sessions(
         skipped=skipped,
         dates_processed=dates_processed,
     )
+
+
+# ---------------------------------------------------------------------------
+# Holidays
+# ---------------------------------------------------------------------------
+
+SUPPORTED_COUNTRIES = {"CO", "MX", "US", "ES", "AR", "PE", "CL", "EC", "VE", "PA"}
+
+@router.get("/holidays")
+async def get_holidays(
+    from_date: date = Query(..., description="Fecha inicio 'yyyy-MM-dd'"),
+    to_date: date = Query(..., description="Fecha fin 'yyyy-MM-dd'"),
+    country: str = Query("CO", description="Código de país ISO-3166 (CO, MX, US…)"),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Devuelve los días festivos en el rango dado para el país especificado.
+    Respuesta: [{"date": "2026-05-01", "name": "Día del Trabajo"}, ...]
+    """
+    import holidays as hol
+
+    country = country.upper()
+    if country not in SUPPORTED_COUNTRIES:
+        raise HTTPException(400, f"País '{country}' no soportado. Use: {', '.join(sorted(SUPPORTED_COUNTRIES))}")
+
+    if (to_date - from_date).days > 366:
+        raise HTTPException(400, "El rango no puede superar 366 días")
+
+    years = set(range(from_date.year, to_date.year + 1))
+    try:
+        country_holidays = hol.country_holidays(country, years=years)
+    except Exception:
+        raise HTTPException(400, f"No se pudieron cargar los festivos para '{country}'")
+
+    result = []
+    current = from_date
+    while current <= to_date:
+        if current in country_holidays:
+            result.append({"date": current.isoformat(), "name": country_holidays[current]})
+        current += timedelta(days=1)
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Holiday conflict detection
+# ---------------------------------------------------------------------------
+
+@router.get("/holiday-conflicts")
+async def get_holiday_conflicts(
+    from_date: date = Query(..., description="Fecha inicio 'yyyy-MM-dd'"),
+    to_date: date = Query(..., description="Fecha fin 'yyyy-MM-dd'"),
+    country: str = Query("CO", description="Código de país ISO-3166"),
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Retorna festivos con sesiones activas programadas en esas fechas.
+    Cada festivo incluye sus sesiones y los clientes inscritos.
+    """
+    _require_tenant(current_user)
+    import holidays as hol
+
+    country = country.upper()
+    if country not in SUPPORTED_COUNTRIES:
+        raise HTTPException(400, f"País '{country}' no soportado")
+
+    if (to_date - from_date).days > 366:
+        raise HTTPException(400, "El rango no puede superar 366 días")
+
+    years = set(range(from_date.year, to_date.year + 1))
+    try:
+        country_holidays = hol.country_holidays(country, years=years)
+    except Exception:
+        raise HTTPException(400, f"No se pudieron cargar los festivos para '{country}'")
+
+    # Collect holiday dates in range
+    holiday_list: list[tuple[date, str]] = []
+    cur = from_date
+    while cur <= to_date:
+        if cur in country_holidays:
+            holiday_list.append((cur, country_holidays[cur]))
+        cur += timedelta(days=1)
+
+    if not holiday_list:
+        return []
+
+    bogota_offset = timedelta(hours=_BOGOTA_UTC_OFFSET)
+    result = []
+
+    for hol_date, hol_name in holiday_list:
+        # Bogotá midnight → UTC window for the full day
+        day_start_utc = datetime(
+            hol_date.year, hol_date.month, hol_date.day, 0, 0, 0, tzinfo=timezone.utc
+        ) + bogota_offset
+        day_end_utc = datetime(
+            hol_date.year, hol_date.month, hol_date.day, 23, 59, 59, tzinfo=timezone.utc
+        ) + bogota_offset
+
+        sessions_result = await db.execute(
+            select(ClassSession).where(
+                ClassSession.tenant_id == current_user.tenant_id,
+                ClassSession.status != "cancelled",
+                ClassSession.start_datetime >= day_start_utc,
+                ClassSession.start_datetime <= day_end_utc,
+            ).order_by(ClassSession.start_datetime)
+        )
+        sessions = sessions_result.scalars().all()
+        if not sessions:
+            continue
+
+        sessions_data = []
+        for session in sessions:
+            space_name = None
+            class_type_name = session.custom_name
+
+            if session.space_id:
+                space = await db.get(Space, session.space_id)
+                if space:
+                    space_name = space.name
+            if not class_type_name and session.class_type_id:
+                ct = await db.get(ClassType, session.class_type_id)
+                if ct:
+                    class_type_name = ct.name
+            if not class_type_name:
+                class_type_name = space_name
+
+            # Load appointments + client names in one join query
+            appts_result = await db.execute(
+                select(Appointment, Client).join(
+                    Client, Appointment.client_id == Client.id
+                ).where(
+                    Appointment.class_session_id == session.id,
+                    Appointment.status.notin_(["cancelled"]),
+                )
+            )
+            appts_data = [
+                {
+                    "id": str(appt.id),
+                    "client_id": str(appt.client_id),
+                    "client_name": client.full_name,
+                    "status": appt.status,
+                }
+                for appt, client in appts_result.all()
+            ]
+
+            sessions_data.append({
+                "id": str(session.id),
+                "start_datetime": session.start_datetime.isoformat(),
+                "space_name": space_name,
+                "class_type_name": class_type_name,
+                "enrolled_count": session.enrolled_count,
+                "appointments": appts_data,
+            })
+
+        result.append({
+            "date": hol_date.isoformat(),
+            "holiday_name": hol_name,
+            "sessions": sessions_data,
+        })
+
+    return result

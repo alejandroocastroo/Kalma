@@ -183,6 +183,7 @@ export interface TokenResponse {
   user_role: string
   tenant_id?: string
   tenant_slug?: string
+  tenant_currency?: string
 }
 
 export interface LoginRequest {
@@ -274,6 +275,14 @@ export interface GenerateSessionsResult {
   dates_processed: number
 }
 
+export type MembershipType = 'monthly' | 'session_based' | 'weekly_sessions' | 'hybrid_fixed' | 'hybrid_monthly'
+
+export interface SpaceQuota {
+  space_id: string
+  sessions_per_week: number
+  scheduled_days?: string[]  // solo hybrid_fixed
+}
+
 export interface Plan {
   id: string
   tenant_id: string
@@ -282,11 +291,12 @@ export interface Plan {
   price_cop: number
   classes_per_week: number
   is_active: boolean
-  membership_type: 'monthly' | 'session_based' | 'weekly_sessions'
+  membership_type: MembershipType
   sessions_per_week: number | null
   total_sessions: number | null
   space_id: string | null
   space_name: string | null
+  space_quotas: SpaceQuota[] | null
   created_at: string
 }
 
@@ -314,7 +324,7 @@ export interface ClientMembership {
   tenant_id: string;
   client_id: string;
   plan_id: string;
-  membership_type: 'monthly' | 'session_based' | 'weekly_sessions';
+  membership_type: MembershipType;
   start_date: string;
   end_date: string | null;
   status: 'active' | 'paused' | 'cancelled';
@@ -334,6 +344,9 @@ export interface ClientMembership {
   preferred_days: number[] | null;
   preferred_hour: number | null;
   preferred_space_id: string | null;
+  space_quotas: SpaceQuota[] | null;
+  space_usage: Record<string, number> | null;
+  preferred_schedule?: { day: number; hour: number; space_id?: string }[] | null;
   makeup_sessions: MakeupSessionRecord[];
   created_at: string;
   updated_at: string;
@@ -355,7 +368,7 @@ export interface CobrosClient {
   client_id: string;
   client_name: string;
   plan_name: string | null;
-  membership_type: 'monthly' | 'session_based' | 'weekly_sessions' | null;
+  membership_type: MembershipType | null;
   priority: 1 | 2 | 3 | 4;
   status_label: string;
   next_billing_date: string | null;

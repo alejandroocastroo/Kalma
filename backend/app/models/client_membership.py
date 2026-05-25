@@ -38,6 +38,9 @@ class ClientMembership(Base, TimestampMixin):
     makeups_allowed: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     makeups_used: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     bonus_sessions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    space_quotas: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{"space_id":"uuid","sessions_per_week":int,"scheduled_days":["monday",...]}]
+    space_usage: Mapped[dict | None] = mapped_column(JSONB, nullable=True)   # {"<space_id>": <sessions_used>}
+    preferred_schedule: Mapped[list | None] = mapped_column(JSONB, nullable=True)  # [{"day":0,"hour":9},{"day":2,"hour":16}]
 
     client = relationship("Client", lazy="noload")
     plan = relationship("Plan", back_populates="memberships", lazy="noload")

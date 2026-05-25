@@ -23,3 +23,4 @@ class TokenResponse(BaseModel):
     user_role: str
     tenant_id: Optional[str] = None
     tenant_slug: Optional[str] = None
+    tenant_currency: Optional[str] = None

@@ -6,6 +6,7 @@ const TOKEN_KEY = 'kalma_access_token'
 const REFRESH_KEY = 'kalma_refresh_token'
 const USER_KEY = 'kalma_user'
 const TENANT_KEY = 'kalma_tenant_slug'
+const CURRENCY_KEY = 'kalma_tenant_currency'
 
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null
@@ -30,6 +31,14 @@ export const getTenantSlug = (): string | null => {
 
 export const setTenantSlug = (slug: string) => localStorage.setItem(TENANT_KEY, slug)
 export const removeTenantSlug = () => localStorage.removeItem(TENANT_KEY)
+
+export const getTenantCurrency = (): string => {
+  if (typeof window === 'undefined') return 'COP'
+  return localStorage.getItem(CURRENCY_KEY) || 'COP'
+}
+
+export const setTenantCurrency = (currency: string) => localStorage.setItem(CURRENCY_KEY, currency)
+export const removeTenantCurrency = () => localStorage.removeItem(CURRENCY_KEY)
 
 export const getStoredUser = (): Partial<User> | null => {
   if (typeof window === 'undefined') return null
@@ -70,6 +79,7 @@ export const saveAuthData = async (data: TokenResponse) => {
   setToken(data.access_token)
   setRefreshToken(data.refresh_token)
   if (data.tenant_slug) setTenantSlug(data.tenant_slug)
+  if (data.tenant_currency) setTenantCurrency(data.tenant_currency)
   setStoredUser({
     id: data.user_id,
     email: data.user_email,
@@ -96,6 +106,7 @@ export const logout = () => {
   removeToken()
   removeRefreshToken()
   removeTenantSlug()
+  removeTenantCurrency()
   removeStoredUser()
   clearSessionCookie()
   window.location.href = '/login'

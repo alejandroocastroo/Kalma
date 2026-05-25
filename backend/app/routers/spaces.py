@@ -1,9 +1,10 @@
+import json
 import uuid
 from datetime import date, datetime, timezone
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
@@ -100,6 +101,20 @@ async def deactivate_space(
     space = result.scalar_one_or_none()
     if not space:
         raise HTTPException(404, "Espacio no encontrado")
+
+    probe = json.dumps([{"space_id": str(space.id)}])
+    ref_check = await db.execute(text("""
+        SELECT 1 FROM plans
+          WHERE space_quotas @> :probe::jsonb
+          AND tenant_id = :tenant LIMIT 1
+        UNION ALL
+        SELECT 1 FROM client_memberships
+          WHERE space_quotas @> :probe::jsonb
+          AND tenant_id = :tenant AND status != 'cancelled' LIMIT 1
+    """), {"probe": probe, "tenant": str(current_user.tenant_id)})
+    if ref_check.first():
+        raise HTTPException(400, "No se puede desactivar: el espacio está en uso por un plan o membresía híbrida activa")
+
     space.is_active = False
     await db.commit()
     return {"message": "Espacio desactivado"}

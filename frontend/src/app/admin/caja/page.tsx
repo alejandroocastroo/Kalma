@@ -8,7 +8,8 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatsCard } from '@/components/admin/stats-card'
-import { formatCOP, categoryLabels, paymentMethodLabels } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels } from '@/lib/utils'
+import { getTenantCurrency } from '@/lib/auth'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
@@ -28,6 +29,7 @@ const INCOME_CATEGORIES = [
   ['clase_privada', 'Clase privada'],
   ['paquete_sesiones', 'Paquete de sesiones'],
   ['membresia', 'Membresía'],
+  ['membresia_hibrida', 'Membresía Híbrida'],
   ['inscripcion', 'Inscripción / matrícula'],
   ['otro_ingreso', 'Otro ingreso'],
 ]
@@ -47,6 +49,7 @@ const EXPENSE_CATEGORIES = [
 ]
 
 export default function CajaPage() {
+  const currency = getTenantCurrency()
   const today = new Date()
   const [startDate, setStartDate] = useState(format(startOfMonth(today), 'yyyy-MM-dd'))
   const [endDate, setEndDate] = useState(format(endOfMonth(today), 'yyyy-MM-dd'))
@@ -143,19 +146,19 @@ export default function CajaPage() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatsCard
           title="Total ingresos"
-          value={formatCOP(summary?.total_income || 0)}
+          value={formatCurrency(summary?.total_income || 0, currency)}
           icon={<TrendingUp className="w-5 h-5 text-green-600" />}
           loading={loadingSummary}
         />
         <StatsCard
           title="Total egresos"
-          value={formatCOP(summary?.total_expenses || 0)}
+          value={formatCurrency(summary?.total_expenses || 0, currency)}
           icon={<TrendingDown className="w-5 h-5 text-red-500" />}
           loading={loadingSummary}
         />
         <StatsCard
           title="Balance neto"
-          value={formatCOP(summary?.net || 0)}
+          value={formatCurrency(summary?.net || 0, currency)}
           icon={<DollarSign className="w-5 h-5" />}
           loading={loadingSummary}
         />
@@ -176,16 +179,16 @@ export default function CajaPage() {
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Ingresos</p>
-                  <p className="text-xs font-semibold text-green-600">{formatCOP(data.income)}</p>
+                  <p className="text-xs font-semibold text-green-600">{formatCurrency(data.income, currency)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Egresos</p>
-                  <p className="text-xs font-semibold text-red-500">{formatCOP(data.expenses)}</p>
+                  <p className="text-xs font-semibold text-red-500">{formatCurrency(data.expenses, currency)}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-400 mb-1">Neto</p>
                   <p className={`text-xs font-semibold ${data.net >= 0 ? 'text-indigo-600' : 'text-red-600'}`}>
-                    {formatCOP(data.net)}
+                    {formatCurrency(data.net, currency)}
                   </p>
                 </div>
               </div>
@@ -204,7 +207,7 @@ export default function CajaPage() {
                 <Pie data={chartData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} dataKey="value">
                   {chartData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
-                <Tooltip formatter={(v: number) => formatCOP(v)} />
+                <Tooltip formatter={(v: number) => formatCurrency(v, currency)} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -290,7 +293,7 @@ export default function CajaPage() {
                       </TableCell>
                       <TableCell className="text-xs text-gray-600">{paymentMethodLabels[p.payment_method] || p.payment_method}</TableCell>
                       <TableCell className={`text-right font-semibold ${p.type === 'income' ? 'text-green-600' : 'text-red-500'}`}>
-                        {p.type === 'expense' ? '-' : '+'}{formatCOP(p.amount)}
+                        {p.type === 'expense' ? '-' : '+'}{formatCurrency(p.amount, currency)}
                       </TableCell>
                       <TableCell>
                         <button onClick={() => deleteMutation.mutate(p.id)} className="text-gray-400 hover:text-red-500 transition-colors">
@@ -330,6 +333,7 @@ export default function CajaPage() {
 }
 
 function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; spaces: Space[]; onClose: () => void }) {
+  const currency = getTenantCurrency()
   const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const methods = [
     ['cash', 'Efectivo'],
@@ -377,7 +381,7 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
   const handleAmount = (e: React.ChangeEvent<HTMLInputElement>) => {
     const digits = e.target.value.replace(/\D/g, '')
     if (!digits) { setForm((f) => ({ ...f, amountDisplay: '' })); return }
-    const formatted = new Intl.NumberFormat('es-CO').format(parseInt(digits, 10))
+    const formatted = new Intl.NumberFormat(getCurrencyLocale(currency)).format(parseInt(digits, 10))
     setForm((f) => ({ ...f, amountDisplay: formatted }))
   }
 
@@ -415,7 +419,7 @@ function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; sp
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Monto (COP) *</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Monto ({currency}) *</label>
         <div className="relative">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm font-medium">$</span>
           <Input

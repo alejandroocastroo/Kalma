@@ -80,6 +80,8 @@ export const auth = {
   me: () => apiClient.get('/auth/me').then((r) => r.data),
   refresh: (refresh_token: string) =>
     apiClient.post<TokenResponse>('/auth/refresh', { refresh_token }).then((r) => r.data),
+  updateCurrency: (currency: string) =>
+    apiClient.put<{ currency: string; message: string }>('/auth/tenant-settings', { currency }).then((r) => r.data),
 }
 
 // ── Class Types ───────────────────────────────────────────────
@@ -105,6 +107,10 @@ export const classSessions = {
     apiClient.post(`/class-sessions/${id}/cancel`).then((r) => r.data),
   delete: (id: string) =>
     apiClient.delete(`/class-sessions/${id}`).then((r) => r.data),
+  cancelHoliday: (id: string, data: { add_makeup: boolean }) =>
+    apiClient.post<{ message: string; appointments_cancelled: number; makeup_credits_added: number }>(
+      `/class-sessions/${id}/cancel-holiday`, data
+    ).then((r) => r.data),
 }
 
 // ── Clients ───────────────────────────────────────────────────
@@ -188,6 +194,10 @@ export const reports = {
 
 // ── Schedule ──────────────────────────────────────────────────
 export const schedule = {
+  holidays: (params: { from_date: string; to_date: string; country?: string }) =>
+    apiClient.get<{ date: string; name: string }[]>('/schedule/holidays', { params }).then((r) => r.data),
+  holidayConflicts: (params: { from_date: string; to_date: string; country?: string }) =>
+    apiClient.get('/schedule/holiday-conflicts', { params }).then((r) => r.data),
   get: () => apiClient.get('/schedule').then((r) => r.data),
   updateDay: (
     dayOfWeek: number,
@@ -228,10 +238,13 @@ export const memberships = {
   create: (data: { client_id: string; plan_id: string; start_date: string; end_date?: string; notes?: string }) =>
     apiClient.post<ClientMembership>('/memberships', data).then(r => r.data),
   createV2: (data: {
-    client_id: string; plan_id: string; membership_type: 'monthly' | 'session_based' | 'weekly_sessions';
+    client_id: string; plan_id: string;
+    membership_type: 'monthly' | 'session_based' | 'weekly_sessions' | 'hybrid_fixed' | 'hybrid_monthly';
     start_date: string; sessions_per_week?: number; scheduled_days?: string[];
+    space_quotas?: { space_id: string; sessions_per_week: number; scheduled_days?: string[] }[];
     makeups_allowed?: number; notes?: string; preferred_days?: number[];
     preferred_hour?: number; preferred_space_id?: string;
+    preferred_schedule?: { day: number; hour: number; space_id?: string }[];
   }) => apiClient.post<ClientMembership>('/memberships/v2', data).then(r => r.data),
   update: (id: string, data: Partial<ClientMembership>) =>
     apiClient.put<ClientMembership>(`/memberships/${id}`, data).then(r => r.data),

@@ -17,6 +17,7 @@ from app.models.class_type import ClassType
 from app.models.client_membership import ClientMembership
 from app.models.payment import Payment
 from app.models.space import Space
+from app.utils.attendance import apply_attendance, revert_attendance
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
@@ -119,6 +120,8 @@ async def delete_appointment(
         session = await db.get(ClassSession, appt.class_session_id)
         if session and session.enrolled_count > 0:
             session.enrolled_count -= 1
+    if appt.status == "attended":
+        await revert_attendance(db, appt)
     await db.delete(appt)
     await db.commit()
     return {"message": "Cliente eliminado de la sesión"}
@@ -140,22 +143,10 @@ async def mark_attended(
     if not appt:
         raise HTTPException(404, "Cita no encontrada")
     appt.status = "attended"
-    # Increment client lifetime counter
     client = await db.get(Client, appt.client_id)
     if client:
         client.total_sessions += 1
-    # Increment sessions_used on active session-tracking membership
-    mem_result = await db.execute(
-        select(ClientMembership).where(
-            ClientMembership.client_id == appt.client_id,
-            ClientMembership.tenant_id == appt.tenant_id,
-            ClientMembership.status == "active",
-            ClientMembership.membership_type.in_(["session_based", "weekly_sessions"]),
-        ).order_by(ClientMembership.created_at.desc()).limit(1)
-    )
-    membership = mem_result.scalar_one_or_none()
-    if membership:
-        membership.sessions_used = (membership.sessions_used or 0) + 1
+    await apply_attendance(db, appt)
     await db.commit()
     return {"message": "Asistencia registrada"}
 
@@ -176,10 +167,13 @@ async def cancel_appointment(
     if not appt:
         raise HTTPException(404, "Cita no encontrada")
     if appt.status != "cancelled":
+        was_attended = appt.status == "attended"
         appt.status = "cancelled"
         session = await db.get(ClassSession, appt.class_session_id)
         if session and session.enrolled_count > 0:
             session.enrolled_count -= 1
+        if was_attended:
+            await revert_attendance(db, appt)
     await db.commit()
     return {"message": "Cita cancelada"}
 

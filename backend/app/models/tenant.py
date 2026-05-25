@@ -23,6 +23,7 @@ class Tenant(Base, TimestampMixin):
     instagram_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     plan: Mapped[str] = mapped_column(String(20), default="basic")
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="COP")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     users = relationship("User", back_populates="tenant", lazy="noload")

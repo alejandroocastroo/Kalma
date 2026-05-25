@@ -1,6 +1,6 @@
 import uuid
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict
 
 
@@ -10,9 +10,10 @@ class ClientMembershipCreate(BaseModel):
     start_date: date
     end_date: Optional[date] = None
     notes: Optional[str] = None
-    preferred_days: Optional[list[int]] = None   # [0,2,4] → lun, mié, vie
-    preferred_hour: Optional[int] = None          # 15 → 3pm
+    preferred_days: Optional[list[int]] = None
+    preferred_hour: Optional[int] = None
     preferred_space_id: Optional[uuid.UUID] = None
+    preferred_schedule: Optional[List[dict]] = None  # [{"day":0,"hour":9},...]
 
 
 class ClientMembershipUpdate(BaseModel):
@@ -24,6 +25,7 @@ class ClientMembershipUpdate(BaseModel):
     preferred_days: Optional[list[int]] = None
     preferred_hour: Optional[int] = None
     preferred_space_id: Optional[uuid.UUID] = None
+    preferred_schedule: Optional[List[dict]] = None
 
 
 class MakeupSessionResponse(BaseModel):
@@ -66,6 +68,9 @@ class ClientMembershipResponse(BaseModel):
     preferred_days: Optional[list[int]] = None
     preferred_hour: Optional[int] = None
     preferred_space_id: Optional[uuid.UUID] = None
+    preferred_schedule: Optional[List[dict]] = None
+    space_quotas: Optional[List[dict]] = None
+    space_usage: Optional[Dict[str, int]] = None
     created_at: datetime
     client_name: Optional[str] = None
     plan_name: Optional[str] = None

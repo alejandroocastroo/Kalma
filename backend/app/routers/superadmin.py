@@ -44,6 +44,7 @@ async def create_tenant(
         name=body.tenant_name,
         slug=body.tenant_slug,
         plan=body.plan,
+        currency=body.currency,
         is_active=True,
         city="Bogotá",
         created_at=now,

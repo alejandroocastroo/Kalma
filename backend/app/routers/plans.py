@@ -39,6 +39,17 @@ async def list_plans(
     return [await _enrich_plan(p, db) for p in plans]
 
 
+def _validate_hybrid_quotas(space_quotas, membership_type: str):
+    if not space_quotas or len(space_quotas) < 2:
+        raise HTTPException(400, f"Plans de tipo {membership_type} requieren al menos 2 espacios en space_quotas")
+    seen = set()
+    for q in space_quotas:
+        sid = str(q.space_id)
+        if sid in seen:
+            raise HTTPException(400, "No puede repetir el mismo espacio en space_quotas")
+        seen.add(sid)
+
+
 @router.post("", status_code=201)
 async def create_plan(
     body: PlanCreate,
@@ -46,7 +57,17 @@ async def create_plan(
     current_user=Depends(get_current_active_user),
 ):
     data = body.model_dump()
-    if body.sessions_per_week:
+    if body.membership_type in ("hybrid_fixed", "hybrid_monthly"):
+        _validate_hybrid_quotas(body.space_quotas, body.membership_type)
+        total_spw = sum(q.sessions_per_week for q in body.space_quotas)
+        data["total_sessions"] = total_spw * 4
+        data["classes_per_week"] = total_spw
+        data["sessions_per_week"] = total_spw
+        data["space_id"] = None
+        data["space_quotas"] = [
+            {**q.model_dump(), "space_id": str(q.space_id)} for q in body.space_quotas
+        ]
+    elif body.sessions_per_week:
         data["total_sessions"] = body.sessions_per_week * 4
         data["classes_per_week"] = body.sessions_per_week
     plan = Plan(tenant_id=current_user.tenant_id, **data)
@@ -79,7 +100,22 @@ async def update_plan(
     if not plan or plan.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Plan no encontrado")
     data = body.model_dump(exclude_none=True)
-    if "sessions_per_week" in data:
+    new_type = data.get("membership_type", plan.membership_type)
+    if new_type in ("hybrid_fixed", "hybrid_monthly") and "space_quotas" in data:
+        quotas_raw = data["space_quotas"]
+        from app.schemas.plan import SpaceQuota as SQ
+        quotas = [SQ(**q) if isinstance(q, dict) else q for q in quotas_raw]
+        _validate_hybrid_quotas(quotas, new_type)
+        total_spw = sum(q.sessions_per_week for q in quotas)
+        data["total_sessions"] = total_spw * 4
+        data["classes_per_week"] = total_spw
+        data["sessions_per_week"] = total_spw
+        data["space_id"] = None
+        data["space_quotas"] = [
+            {**q.model_dump(), "space_id": str(q.space_id)} if hasattr(q, "model_dump") else q
+            for q in quotas
+        ]
+    elif "sessions_per_week" in data:
         data["total_sessions"] = data["sessions_per_week"] * 4
         data["classes_per_week"] = data["sessions_per_week"]
     for field, value in data.items():

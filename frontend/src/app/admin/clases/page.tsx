@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCOP } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale } from '@/lib/utils'
+import { getTenantCurrency } from '@/lib/auth'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Plus, Clock, Users, DollarSign, Edit, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { ClassType } from '@/types'
@@ -68,7 +70,7 @@ export default function ClasesPage() {
                   <Users className="w-4 h-4 text-gray-400" />Capacidad: {ct.capacity} personas
                 </div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
-                  <DollarSign className="w-4 h-4 text-green-600" />{formatCOP(ct.price)}
+                  <DollarSign className="w-4 h-4 text-green-600" />{formatCurrency(ct.price, getTenantCurrency())}
                 </div>
               </div>
 
@@ -95,12 +97,13 @@ export default function ClasesPage() {
 }
 
 function ClassTypeForm({ initial, onClose }: { initial: ClassType | null; onClose: () => void }) {
+  const currency = getTenantCurrency()
   const [form, setForm] = useState({
     name: initial?.name || '',
     description: initial?.description || '',
     duration_minutes: String(initial?.duration_minutes || 60),
     capacity: String(initial?.capacity || 10),
-    price: String(initial?.price || ''),
+    price: initial?.price ? new Intl.NumberFormat(getCurrencyLocale(currency)).format(initial.price) : '',
     color: initial?.color || '#6366f1',
   })
   const [loading, setLoading] = useState(false)
@@ -111,7 +114,8 @@ function ClassTypeForm({ initial, onClose }: { initial: ClassType | null; onClos
     if (!form.name || !form.price) { toast.error('Nombre y precio son requeridos'); return }
     setLoading(true)
     try {
-      const data = { ...form, duration_minutes: parseInt(form.duration_minutes), capacity: parseInt(form.capacity), price: parseFloat(form.price) }
+      const rawPrice = parseInt(form.price.replace(/\D/g, ''), 10) || 0
+      const data = { ...form, duration_minutes: parseInt(form.duration_minutes), capacity: parseInt(form.capacity), price: rawPrice }
       if (initial) { await classTypes.update(initial.id, data) } else { await classTypes.create(data as any) }
       toast.success(initial ? 'Clase actualizada' : 'Clase creada')
       onClose()
@@ -143,8 +147,8 @@ function ClassTypeForm({ initial, onClose }: { initial: ClassType | null; onClos
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Precio (COP) *</label>
-        <Input type="number" min="0" placeholder="120000" value={form.price} onChange={f('price')} />
+        <label className="block text-sm font-medium text-gray-700 mb-1">Precio ({currency}) *</label>
+        <CurrencyInput value={form.price} onChange={v => setForm({ ...form, price: v })} currency={currency} placeholder="120.000" />
       </div>
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={loading}>{loading ? 'Guardando...' : initial ? 'Actualizar' : 'Crear'}</Button>

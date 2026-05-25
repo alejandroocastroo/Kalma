@@ -10,6 +10,16 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { superadminApi } from '@/lib/superadmin-api'
 
+const CURRENCY_OPTIONS = [
+  { value: 'COP', label: 'COP — Peso colombiano', example: '$150.000' },
+  { value: 'MXN', label: 'MXN — Peso mexicano',  example: '$150,000' },
+  { value: 'USD', label: 'USD — Dólar estadounidense', example: '$150,000' },
+  { value: 'EUR', label: 'EUR — Euro',            example: '€150.000' },
+  { value: 'ARS', label: 'ARS — Peso argentino',  example: '$150.000' },
+  { value: 'PEN', label: 'PEN — Sol peruano',     example: 'S/150,000' },
+  { value: 'CLP', label: 'CLP — Peso chileno',    example: '$150.000' },
+]
+
 const schema = z.object({
   tenant_name: z.string().min(2, 'Mínimo 2 caracteres'),
   tenant_slug: z
@@ -17,6 +27,7 @@ const schema = z.object({
     .min(2, 'Mínimo 2 caracteres')
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Solo minúsculas, números y guiones'),
   plan: z.enum(['basic', 'pro', 'enterprise']),
+  currency: z.string().min(3).max(3),
   admin_full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   admin_email: z.string().email('Email inválido'),
   admin_password: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -34,7 +45,7 @@ export function CreateTenantModal({ open, onClose }: Props) {
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { plan: 'basic' },
+    defaultValues: { plan: 'basic', currency: 'COP' },
   })
 
   const mutation = useMutation({
@@ -100,6 +111,19 @@ export function CreateTenantModal({ open, onClose }: Props) {
                   <option value="enterprise">Enterprise</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Moneda *</label>
+              <select
+                {...register('currency')}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {CURRENCY_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label} · ej. {opt.example}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 

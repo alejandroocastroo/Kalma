@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { Plus, RotateCcw, Pencil, RefreshCw, Calendar, ChevronRight, CheckCircle2, ArrowRight, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi, classSessions } from '@/lib/api'
 import type { ClientMembership, Plan, Client, WeeklyStats, AutoBookResult, ClassSession } from '@/types'
-import { formatCOP } from '@/lib/utils'
+import { formatCurrency } from '@/lib/utils'
+import { getTenantCurrency } from '@/lib/auth'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -300,6 +301,7 @@ function MakeupDialogContent({
 
 export default function MembresiasPage() {
   const qc = useQueryClient()
+  const currency = getTenantCurrency()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
   const [spaceFilter, setSpaceFilter] = useState('')
@@ -319,16 +321,20 @@ export default function MembresiasPage() {
   const [form, setForm] = useState({
     client_id: '',
     plan_id: '',
-    membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions',
+    membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions' | 'hybrid_fixed' | 'hybrid_monthly',
     start_date: '',
     end_date: '',
     sessions_per_week: '' as '' | '2' | '3' | '5',
     scheduled_days: [] as string[],
+    // hybrid: space_quotas_with_days = [{space_id, sessions_per_week, scheduled_days}]
+    space_quotas_with_days: [] as { space_id: string; sessions_per_week: number; scheduled_days: string[] }[],
     makeups_allowed: '1',
     notes: '',
     preferred_days: [] as number[],
     preferred_hour: '' as string | '',
     preferred_space_id: '',
+    // session_based/hybrid_fixed: horario por día [{day:0,hour:9,space_id?}]
+    preferred_schedule: [] as { day: number; hour: number | ''; space_id?: string }[],
   })
   // Client search autocomplete
   const [clientSearch, setClientSearch] = useState('')
@@ -429,9 +435,10 @@ export default function MembresiasPage() {
       qc.invalidateQueries({ queryKey: ['memberships'] })
       toast.success('Membresía creada')
       setDialogOpen(false)
-      if (form.preferred_days.length > 0 && form.preferred_hour !== '') {
-        autoBookMutation.mutate(created.id)
-      }
+      const shouldAutoBook = (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed')
+        ? form.preferred_schedule.some(e => e.hour !== '')
+        : false
+      if (shouldAutoBook) autoBookMutation.mutate(created.id)
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al crear membresía'),
   })
@@ -443,9 +450,10 @@ export default function MembresiasPage() {
       qc.invalidateQueries({ queryKey: ['memberships'] })
       toast.success('Membresía actualizada')
       setDialogOpen(false)
-      if (form.preferred_days.length > 0 && form.preferred_hour !== '') {
-        autoBookMutation.mutate(updated.id)
-      }
+      const shouldAutoBook = (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed')
+        ? form.preferred_schedule.some(e => e.hour !== '')
+        : false
+      if (shouldAutoBook) autoBookMutation.mutate(updated.id)
     },
     onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al actualizar'),
   })
@@ -497,9 +505,35 @@ export default function MembresiasPage() {
     { key: 'sunday', label: 'D' },
   ]
 
+  const DAY_STR_TO_NUM: Record<string, number> = {
+    monday: 0, tuesday: 1, wednesday: 2, thursday: 3, friday: 4, saturday: 5, sunday: 6,
+  }
+  const DAY_NUM_LABELS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
+
+  function scheduleFromDays(days: string[], spaceId?: string): { day: number; hour: number | ''; space_id?: string }[] {
+    return days
+      .map(d => DAY_STR_TO_NUM[d])
+      .filter(n => n !== undefined)
+      .sort((a, b) => a - b)
+      .map(day => ({ day, hour: '', ...(spaceId ? { space_id: spaceId } : {}) }))
+  }
+
+  function scheduleFromHybridQuotas(quotas: { space_id: string; scheduled_days: string[] }[], prev: { day: number; hour: number | ''; space_id?: string }[]): { day: number; hour: number | ''; space_id?: string }[] {
+    return quotas.flatMap(q =>
+      (q.scheduled_days || [])
+        .map(d => DAY_STR_TO_NUM[d])
+        .filter(n => n !== undefined)
+        .sort((a, b) => a - b)
+        .map(day => {
+          const existing = prev.find(e => e.space_id === q.space_id && e.day === day)
+          return existing ?? { day, hour: '', space_id: q.space_id }
+        })
+    )
+  }
+
   function openCreate() {
     setEditing(null)
-    setForm({ client_id: '', plan_id: '', membership_type: 'monthly' as 'monthly' | 'session_based' | 'weekly_sessions', start_date: '', end_date: '', sessions_per_week: '', scheduled_days: [], makeups_allowed: '1', notes: '', preferred_days: [], preferred_hour: '', preferred_space_id: '' })
+    setForm({ client_id: '', plan_id: '', membership_type: 'monthly' as any, start_date: '', end_date: '', sessions_per_week: '', scheduled_days: [], space_quotas_with_days: [], makeups_allowed: '1', notes: '', preferred_days: [], preferred_hour: '', preferred_space_id: '', preferred_schedule: [] })
     setClientSearch('')
     setSelectedClientName('')
     setClientDropdownOpen(false)
@@ -508,19 +542,28 @@ export default function MembresiasPage() {
 
   function openEdit(m: ClientMembership) {
     setEditing(m)
+    const existingSchedule = m.preferred_schedule && m.preferred_schedule.length > 0
+      ? m.preferred_schedule.map(e => ({ day: e.day, hour: e.hour as number | '', space_id: e.space_id }))
+      : scheduleFromDays(m.scheduled_days || [])
     setForm({
       client_id: m.client_id,
       plan_id: m.plan_id,
-      membership_type: (m.membership_type as 'monthly' | 'session_based' | 'weekly_sessions') || 'monthly',
+      membership_type: (m.membership_type as any) || 'monthly',
       start_date: m.start_date.slice(0, 10),
       end_date: m.end_date ? m.end_date.slice(0, 10) : '',
       sessions_per_week: m.sessions_per_week ? String(m.sessions_per_week) as '2'|'3'|'5' : '',
       scheduled_days: m.scheduled_days || [],
+      space_quotas_with_days: (m.space_quotas || []).map(q => ({
+        space_id: q.space_id,
+        sessions_per_week: q.sessions_per_week,
+        scheduled_days: q.scheduled_days || [],
+      })),
       makeups_allowed: String(m.makeups_allowed ?? 1),
       notes: m.notes || '',
       preferred_days: m.preferred_days || [],
       preferred_hour: m.preferred_hour != null ? String(m.preferred_hour) : '',
       preferred_space_id: m.preferred_space_id || '',
+      preferred_schedule: existingSchedule,
     })
     setClientSearch('')
     setSelectedClientName(m.client_name || '')
@@ -534,13 +577,19 @@ export default function MembresiasPage() {
       setForm(f => ({ ...f, plan_id: planId }))
       return
     }
+    const hybridQuotas = (plan.membership_type === 'hybrid_fixed' || plan.membership_type === 'hybrid_monthly')
+      ? (plan.space_quotas || []).map(q => ({ space_id: q.space_id, sessions_per_week: q.sessions_per_week, scheduled_days: [] }))
+      : []
     setForm(f => ({
       ...f,
       plan_id: planId,
-      membership_type: plan.membership_type as 'monthly' | 'session_based' | 'weekly_sessions',
+      membership_type: plan.membership_type as any,
       sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) as '2' | '3' | '5' : '',
+      space_quotas_with_days: hybridQuotas,
     }))
   }
+
+  const isHybrid = form.membership_type === 'hybrid_fixed' || form.membership_type === 'hybrid_monthly'
 
   function handleSave() {
     if (!form.client_id || !form.plan_id || !form.start_date) {
@@ -554,31 +603,51 @@ export default function MembresiasPage() {
     if (form.membership_type === 'weekly_sessions') {
       if (!form.sessions_per_week) { toast.error('Selecciona las sesiones por semana'); return }
     }
+    if (isHybrid && form.membership_type === 'hybrid_fixed') {
+      for (const q of form.space_quotas_with_days) {
+        if (q.scheduled_days.length !== q.sessions_per_week) {
+          const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || q.space_id
+          toast.error(`Selecciona exactamente ${q.sessions_per_week} día(s) para ${spaceName}`)
+          return
+        }
+      }
+    }
+    const validSchedule = (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed')
+      ? form.preferred_schedule.filter(e => e.hour !== '')
+      : []
+
     if (editing) {
       const payload = {
         plan_id: form.plan_id,
         start_date: form.start_date,
         end_date: form.end_date || undefined,
         notes: form.notes || undefined,
-        preferred_days: form.preferred_days.length > 0 ? form.preferred_days : undefined,
-        preferred_hour: form.preferred_hour !== '' ? Number(form.preferred_hour) : undefined,
-        preferred_space_id: form.preferred_space_id || undefined,
+        preferred_days: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_days.length > 0) ? form.preferred_days : undefined,
+        preferred_hour: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_hour !== '') ? Number(form.preferred_hour) : undefined,
+        preferred_space_id: (!isHybrid && form.preferred_space_id) || undefined,
+        preferred_schedule: validSchedule.length > 0 ? validSchedule as { day: number; hour: number }[] : undefined,
         status: editing.status,
       }
       updateMutation.mutate({ id: editing.id, data: payload })
     } else {
-      const payload = {
+      const payload: Parameters<typeof memberships.createV2>[0] = {
         client_id: form.client_id,
         plan_id: form.plan_id,
-        membership_type: form.membership_type,
+        membership_type: form.membership_type as any,
         start_date: form.start_date,
-        sessions_per_week: form.sessions_per_week ? Number(form.sessions_per_week) : undefined,
-        scheduled_days: form.scheduled_days.length > 0 ? form.scheduled_days : undefined,
+        sessions_per_week: (!isHybrid && form.sessions_per_week) ? Number(form.sessions_per_week) : undefined,
+        scheduled_days: (!isHybrid && form.scheduled_days.length > 0) ? form.scheduled_days : undefined,
+        space_quotas: isHybrid ? form.space_quotas_with_days.map(q => ({
+          space_id: q.space_id,
+          sessions_per_week: q.sessions_per_week,
+          scheduled_days: form.membership_type === 'hybrid_fixed' ? q.scheduled_days : undefined,
+        })) : undefined,
         makeups_allowed: Number(form.makeups_allowed) || 1,
         notes: form.notes || undefined,
-        preferred_days: form.preferred_days.length > 0 ? form.preferred_days : undefined,
-        preferred_hour: form.preferred_hour !== '' ? Number(form.preferred_hour) : undefined,
-        preferred_space_id: form.preferred_space_id || undefined,
+        preferred_days: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_days.length > 0) ? form.preferred_days : undefined,
+        preferred_hour: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_hour !== '') ? Number(form.preferred_hour) : undefined,
+        preferred_space_id: (!isHybrid && form.preferred_space_id) || undefined,
+        preferred_schedule: validSchedule.length > 0 ? validSchedule as { day: number; hour: number }[] : undefined,
       }
       createV2Mutation.mutate(payload)
     }
@@ -676,6 +745,9 @@ export default function MembresiasPage() {
                 <p className="font-semibold text-gray-900 leading-tight">{m.client_name || 'Cliente'}</p>
                 <div className="flex items-center gap-1.5 flex-wrap justify-end">
                   {(() => {
+                    if (m.membership_type === 'hybrid_fixed' || m.membership_type === 'hybrid_monthly') {
+                      return <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">Híbrido</span>
+                    }
                     const plan = plansList.find(p => p.id === m.plan_id)
                     return plan?.space_name ? (
                       <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full">{plan.space_name}</span>
@@ -696,7 +768,7 @@ export default function MembresiasPage() {
                     </span>
                   )}
                   {m.plan_price_cop != null && (
-                    <span className="text-xs text-gray-500">{formatCOP(m.plan_price_cop)}/mes</span>
+                    <span className="text-xs text-gray-500">{formatCurrency(m.plan_price_cop, currency)}/mes</span>
                   )}
                 </div>
               </div>
@@ -704,7 +776,7 @@ export default function MembresiasPage() {
               {/* Dates */}
               <div className="text-xs text-gray-500 flex items-center gap-1 flex-wrap">
                 <span>Desde {formatSafeDate(m.start_date)}</span>
-                {m.membership_type === 'session_based' && m.expiry_date
+                {(m.membership_type === 'session_based' || m.membership_type === 'hybrid_fixed') && m.expiry_date
                   ? <span>hasta {formatSafeDate(m.expiry_date)} <span className="text-gray-400">(calculado)</span></span>
                   : m.end_date
                     ? <span>hasta {formatSafeDate(m.end_date)}</span>
@@ -757,6 +829,40 @@ export default function MembresiasPage() {
                 <p className="text-xs text-gray-400">Factura día {m.billing_day}</p>
               )}
 
+              {/* Progreso por espacio para planes híbridos */}
+              {(m.membership_type === 'hybrid_fixed' || m.membership_type === 'hybrid_monthly') && m.space_quotas && m.space_quotas.length > 0 && (
+                <div className="space-y-2">
+                  {m.space_quotas.map(q => {
+                    const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || 'Espacio'
+                    const used = (m.space_usage || {})[q.space_id] ?? 0
+                    const total = q.sessions_per_week * 4
+                    const pct = Math.min(100, (used / total) * 100)
+                    return (
+                      <div key={q.space_id} className="space-y-0.5">
+                        <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">{spaceName}</span>
+                          <span className="font-semibold text-gray-700">{used} <span className="font-normal text-gray-400">/ {total}</span></span>
+                        </div>
+                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all ${pct >= 90 ? 'bg-red-400' : pct >= 70 ? 'bg-amber-400' : 'bg-green-400'}`}
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                        {m.membership_type === 'hybrid_fixed' && q.scheduled_days && q.scheduled_days.length > 0 && (
+                          <p className="text-xs text-gray-400">
+                            {q.scheduled_days.map(d => ({ monday:'L',tuesday:'M',wednesday:'X',thursday:'J',friday:'V',saturday:'S',sunday:'D' })[d] || d).join(' · ')}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })}
+                  {m.membership_type === 'hybrid_monthly' && m.billing_day != null && (
+                    <p className="text-xs text-gray-400">Factura día {m.billing_day}</p>
+                  )}
+                </div>
+              )}
+
               {/* Horario fijo */}
               {m.preferred_days && m.preferred_days.length > 0 && (
                 <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -767,6 +873,20 @@ export default function MembresiasPage() {
                   {m.preferred_space_name && (
                     <span className="text-gray-400">— {m.preferred_space_name}</span>
                   )}
+                </div>
+              )}
+
+              {/* Horario fijo por día */}
+              {m.preferred_schedule && m.preferred_schedule.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {m.preferred_schedule.map((e, i) => {
+                    const spaceName = e.space_id ? spacesList.find((s: any) => s.id === e.space_id)?.name : null
+                    return (
+                      <span key={i} className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">
+                        {spaceName ? `${spaceName.split(' ')[0]} · ` : ''}{['L','M','X','J','V','S','D'][e.day]} {e.hour < 10 ? `0${e.hour}` : e.hour}:00
+                      </span>
+                    )
+                  })}
                 </div>
               )}
 
@@ -827,8 +947,10 @@ export default function MembresiasPage() {
             {!editing && form.plan_id && (
               <div className="px-3 py-2 rounded-xl bg-gray-50 border border-gray-200 text-sm text-gray-600">
                 Tipo: <span className="font-semibold text-gray-800">
-                  {form.membership_type === 'session_based' ? 'Por sesiones (paquete)'
+                  {form.membership_type === 'session_based' ? 'Sesiones semanales días fijos'
                     : form.membership_type === 'weekly_sessions' ? 'Sesiones semanales'
+                    : form.membership_type === 'hybrid_fixed' ? 'Híbrido días fijos'
+                    : form.membership_type === 'hybrid_monthly' ? 'Híbrido mes a mes'
                     : 'Mensualidad fija'}
                 </span>
                 <span className="text-xs text-gray-400 ml-2">(se toma del plan)</span>
@@ -877,7 +999,7 @@ export default function MembresiasPage() {
               >
                 <option value="">Selecciona un plan...</option>
                 {plansList.map(p => (
-                  <option key={p.id} value={p.id}>{p.name} — {formatCOP(p.price_cop)}</option>
+                  <option key={p.id} value={p.id}>{p.name} — {formatCurrency(p.price_cop, currency)}</option>
                 ))}
               </select>
               {(() => {
@@ -897,17 +1019,6 @@ export default function MembresiasPage() {
             </div>
 
             {/* Campos según tipo */}
-            {form.membership_type === 'monthly' && (
-              <div className="space-y-1">
-                <label className="block text-sm font-medium text-gray-700">Fecha fin</label>
-                <Input
-                  type="date"
-                  value={form.end_date}
-                  onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
-                />
-              </div>
-            )}
-
             {form.membership_type === 'session_based' && (
               <div className="space-y-3">
                 {form.sessions_per_week && (
@@ -925,12 +1036,19 @@ export default function MembresiasPage() {
                         <button
                           key={key}
                           type="button"
-                          onClick={() => setForm(f => ({
-                            ...f,
-                            scheduled_days: selected
-                              ? f.scheduled_days.filter(d => d !== key)
-                              : [...f.scheduled_days, key],
-                          }))}
+                          onClick={() => {
+                            const newDays = selected
+                              ? form.scheduled_days.filter(d => d !== key)
+                              : [...form.scheduled_days, key]
+                            setForm(f => ({
+                              ...f,
+                              scheduled_days: newDays,
+                              preferred_schedule: scheduleFromDays(newDays).map(entry => {
+                                const existing = f.preferred_schedule.find(e => e.day === entry.day)
+                                return existing ?? entry
+                              }),
+                            }))
+                          }}
                           className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
                             selected ? 'bg-primary-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
@@ -946,6 +1064,58 @@ export default function MembresiasPage() {
                     </p>
                   )}
                 </div>
+
+                {/* Horario por día — opcional */}
+                {form.preferred_schedule.length > 0 && (
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      Hora por día <span className="text-gray-400 font-normal">(opcional — para agendar automáticamente)</span>
+                    </p>
+                    <div className="space-y-2">
+                      {form.preferred_schedule.map((entry, idx) => (
+                        <div key={entry.day} className="flex items-center gap-3">
+                          <span className="text-sm text-gray-700 w-20 shrink-0">{DAY_NUM_LABELS[entry.day]}</span>
+                          <select
+                            value={entry.hour}
+                            onChange={e => setForm(f => ({
+                              ...f,
+                              preferred_schedule: f.preferred_schedule.map((s, i) =>
+                                i === idx ? { ...s, hour: e.target.value === '' ? '' : Number(e.target.value) } : s
+                              ),
+                            }))}
+                            className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          >
+                            <option value="">Sin hora fija</option>
+                            {Array.from({ length: 16 }, (_, i) => i + 5).map(h => (
+                              <option key={h} value={h}>
+                                {h < 10 ? `0${h}` : h}:00 {h < 12 ? 'am' : h === 12 ? 'pm' : `${h - 12}pm`}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Espacio preferido */}
+                    <div className="pt-1 space-y-1">
+                      <label className="block text-xs text-gray-500">Espacio (opcional)</label>
+                      <select
+                        value={form.preferred_space_id}
+                        onChange={e => setForm(f => ({ ...f, preferred_space_id: e.target.value }))}
+                        className="w-full px-3 py-1.5 rounded-lg border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="">Cualquier espacio</option>
+                        {spacesList.map((s: any) => (
+                          <option key={s.id} value={s.id}>{s.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    {form.preferred_schedule.some(e => e.hour !== '') && (
+                      <p className="text-xs text-green-600">
+                        Al guardar se agendarán automáticamente las clases existentes en el período del plan.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -961,6 +1131,125 @@ export default function MembresiasPage() {
                 )}
               </div>
             )}
+
+            {/* Híbrido días fijos — picker de días por espacio */}
+            {form.membership_type === 'hybrid_fixed' && form.space_quotas_with_days.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-gray-700">Días fijos por espacio *</p>
+                {form.space_quotas_with_days.map((q, idx) => {
+                  const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || `Espacio ${idx + 1}`
+                  return (
+                    <div key={q.space_id} className="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-gray-800">{spaceName}</p>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                          q.scheduled_days.length === q.sessions_per_week
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-amber-100 text-amber-700'
+                        }`}>
+                          {q.scheduled_days.length}/{q.sessions_per_week} días
+                        </span>
+                      </div>
+                      <div className="flex gap-1.5">
+                        {SCHEDULED_DAYS.map(({ key, label }) => {
+                          const selected = q.scheduled_days.includes(key)
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => {
+                                const newDays = selected
+                                  ? q.scheduled_days.filter(d => d !== key)
+                                  : [...q.scheduled_days, key]
+                                setForm(f => {
+                                  const newQuotas = f.space_quotas_with_days.map((sq, i) =>
+                                    i === idx ? { ...sq, scheduled_days: newDays } : sq
+                                  )
+                                  return {
+                                    ...f,
+                                    space_quotas_with_days: newQuotas,
+                                    preferred_schedule: scheduleFromHybridQuotas(
+                                      newQuotas.map(sq => ({ space_id: sq.space_id, scheduled_days: sq.scheduled_days })),
+                                      f.preferred_schedule
+                                    ),
+                                  }
+                                })
+                              }}
+                              className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
+                                selected ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-100'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Hora por día para este espacio */}
+                      {q.scheduled_days.length > 0 && (() => {
+                        const spaceEntries = form.preferred_schedule.filter(e => e.space_id === q.space_id)
+                        return spaceEntries.length > 0 ? (
+                          <div className="space-y-1.5 pt-1">
+                            <p className="text-xs text-gray-500">Hora por día <span className="text-gray-400">(opcional)</span></p>
+                            {spaceEntries.map((entry, ei) => (
+                              <div key={`${q.space_id}-${entry.day}`} className="flex items-center gap-2">
+                                <span className="text-xs text-gray-600 w-16 shrink-0">{DAY_NUM_LABELS[entry.day]}</span>
+                                <select
+                                  value={entry.hour}
+                                  onChange={e => setForm(f => ({
+                                    ...f,
+                                    preferred_schedule: f.preferred_schedule.map(s =>
+                                      s.space_id === q.space_id && s.day === entry.day
+                                        ? { ...s, hour: e.target.value === '' ? '' : Number(e.target.value) }
+                                        : s
+                                    ),
+                                  }))}
+                                  className="flex-1 px-2 py-1 rounded-lg border border-gray-300 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                >
+                                  <option value="">Sin hora fija</option>
+                                  {Array.from({ length: 16 }, (_, i) => i + 5).map(h => (
+                                    <option key={h} value={h}>
+                                      {h < 10 ? `0${h}` : h}:00 {h < 12 ? 'am' : h === 12 ? 'pm' : `${h - 12}pm`}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null
+                      })()}
+                    </div>
+                  )
+                })}
+                {form.space_quotas_with_days.every(q => q.scheduled_days.length === q.sessions_per_week) && (
+                  <p className="text-xs text-gray-400">
+                    Total: {form.space_quotas_with_days.reduce((s, q) => s + q.sessions_per_week, 0)} sesiones/semana · {form.space_quotas_with_days.reduce((s, q) => s + q.sessions_per_week, 0) * 4} sesiones totales
+                  </p>
+                )}
+                {form.preferred_schedule.some(e => e.hour !== '') && (
+                  <p className="text-xs text-green-600">
+                    Al guardar se agendarán automáticamente las clases existentes en ambos espacios.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Híbrido mes a mes — resumen */}
+            {form.membership_type === 'hybrid_monthly' && form.space_quotas_with_days.length > 0 && (
+              <div className="rounded-xl bg-purple-50 border border-purple-100 px-3 py-2.5 text-sm text-purple-700 space-y-1">
+                {form.space_quotas_with_days.map((q, idx) => {
+                  const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || `Espacio ${idx + 1}`
+                  return (
+                    <p key={q.space_id}>{spaceName}: <span className="font-semibold">{q.sessions_per_week} ses./sem</span></p>
+                  )
+                })}
+                <p className="text-xs text-purple-500">
+                  Total: {form.space_quotas_with_days.reduce((s, q) => s + q.sessions_per_week, 0)} ses./sem
+                  {form.start_date && ` · Se renueva el día ${new Date(form.start_date + 'T00:00:00').getDate()} de cada mes`}
+                </p>
+              </div>
+            )}
+
             {editing && (
               <div className="space-y-1">
                 <label className="block text-sm font-medium text-gray-700">Estado</label>
@@ -986,77 +1275,6 @@ export default function MembresiasPage() {
               />
             </div>
 
-            {/* Horario fijo — opcional */}
-            <div className="border-t border-gray-100 pt-4 space-y-3">
-              <p className="text-sm font-medium text-gray-700">Horario fijo <span className="text-gray-400 font-normal">(opcional)</span></p>
-              <p className="text-xs text-gray-400">Si se configura, se agendarán automáticamente los cupos en el calendario del mes actual.</p>
-
-              {/* Días de la semana */}
-              <div className="space-y-1">
-                <label className="block text-xs text-gray-500">Días</label>
-                <div className="flex gap-1.5 flex-wrap">
-                  {[
-                    { d: 0, label: 'L' }, { d: 1, label: 'M' }, { d: 2, label: 'X' },
-                    { d: 3, label: 'J' }, { d: 4, label: 'V' }, { d: 5, label: 'S' }, { d: 6, label: 'D' }
-                  ].map(({ d, label }) => {
-                    const selected = form.preferred_days.includes(d)
-                    return (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => setForm(f => ({
-                          ...f,
-                          preferred_days: selected
-                            ? f.preferred_days.filter(x => x !== d)
-                            : [...f.preferred_days, d].sort()
-                        }))}
-                        className={`w-9 h-9 rounded-lg text-sm font-medium transition ${
-                          selected
-                            ? 'bg-primary-600 text-white'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-
-              {/* Hora y Espacio */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="block text-xs text-gray-500">Hora</label>
-                  <select
-                    value={form.preferred_hour}
-                    onChange={e => setForm(f => ({ ...f, preferred_hour: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Sin hora</option>
-                    {Array.from({ length: 16 }, (_, i) => i + 5).map(h => (
-                      <option key={h} value={h}>
-                        {h < 10 ? `0${h}` : h}:00 {h < 12 ? 'am' : h === 12 ? 'pm' : `${h - 12}pm`}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* Espacio */}
-                <div className="space-y-1">
-                  <label className="block text-xs text-gray-500">Espacio</label>
-                  <select
-                    value={form.preferred_space_id}
-                    onChange={e => setForm(f => ({ ...f, preferred_space_id: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  >
-                    <option value="">Cualquier espacio</option>
-                    {spacesList.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>

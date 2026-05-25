@@ -29,6 +29,7 @@ CATEGORY_LABELS: dict[str, str] = {
     "clase_privada": "Clase privada",
     "paquete_sesiones": "Paquete de sesiones",
     "membresia": "Membresía",
+    "membresia_hibrida": "Membresía Híbrida",
     "inscripcion": "Inscripción / matrícula",
     "otro_ingreso": "Otro ingreso",
     "arriendo": "Arriendo",

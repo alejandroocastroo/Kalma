@@ -4,7 +4,8 @@ import { classSessions, payments, clients, appointments, reports } from '@/lib/a
 import { StatsCard } from '@/components/admin/stats-card'
 import { SessionCard } from '@/components/admin/session-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCOP, formatDateTime, appointmentStatusConfig, getInitials } from '@/lib/utils'
+import { formatCurrency, formatDateTime, appointmentStatusConfig, getInitials } from '@/lib/utils'
+import { getTenantCurrency } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp, Plus, Cake } from 'lucide-react'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
@@ -14,6 +15,7 @@ import Link from 'next/link'
 const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 export default function DashboardPage() {
+  const currency = getTenantCurrency()
   const today = new Date()
   const monthStart = format(startOfMonth(today), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(today), 'yyyy-MM-dd')
@@ -102,13 +104,13 @@ export default function DashboardPage() {
         />
         <StatsCard
           title="Ingresos del mes"
-          value={loadingSummary ? '—' : formatCOP(summary?.total_income || 0)}
+          value={loadingSummary ? '—' : formatCurrency(summary?.total_income || 0, currency)}
           icon={<DollarSign className="w-5 h-5" />}
           loading={loadingSummary}
         />
         <StatsCard
           title="Balance neto"
-          value={loadingSummary ? '—' : formatCOP(summary?.net || 0)}
+          value={loadingSummary ? '—' : formatCurrency(summary?.net || 0, currency)}
           icon={<TrendingUp className="w-5 h-5" />}
           loading={loadingSummary}
         />

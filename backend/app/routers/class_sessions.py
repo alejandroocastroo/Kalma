@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
+from pydantic import BaseModel
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
@@ -22,6 +23,8 @@ from app.models.space import Space
 from app.models.appointment import Appointment
 from app.models.client import Client
 from app.models.instructor import Instructor
+from app.models.client_membership import ClientMembership
+from app.utils.attendance import revert_attendance
 
 router = APIRouter(prefix="/class-sessions", tags=["Sesiones de Clase"])
 
@@ -350,3 +353,76 @@ async def delete_session(
     await db.delete(session)
     await db.commit()
     return {"message": "Sesión eliminada"}
+
+
+class CancelHolidayBody(BaseModel):
+    add_makeup: bool = False
+
+
+@router.post("/{session_id}/cancel-holiday")
+async def cancel_holiday_session(
+    session_id: str,
+    body: CancelHolidayBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Cancela una sesión programada en festivo y, opcionalmente, agrega
+    un crédito de reposición (makeup_credit) a la membresía activa de
+    cada cliente inscrito.
+    """
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+
+    result = await db.execute(
+        select(ClassSession).where(
+            ClassSession.id == uuid.UUID(session_id),
+            ClassSession.tenant_id == current_user.tenant_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(404, "Sesión no encontrada")
+
+    if session.status == "cancelled":
+        return {"message": "La sesión ya estaba cancelada", "appointments_cancelled": 0, "makeup_credits_added": 0}
+
+    # Load active appointments
+    appts_result = await db.execute(
+        select(Appointment).where(
+            Appointment.class_session_id == session.id,
+            Appointment.status.notin_(["cancelled"]),
+        )
+    )
+    appts = appts_result.scalars().all()
+
+    makeup_credits_added = 0
+
+    for appt in appts:
+        if appt.status == "attended":
+            await revert_attendance(db, appt)
+        appt.status = "cancelled"
+
+        if body.add_makeup:
+            m_result = await db.execute(
+                select(ClientMembership).where(
+                    ClientMembership.client_id == appt.client_id,
+                    ClientMembership.tenant_id == current_user.tenant_id,
+                    ClientMembership.status == "active",
+                ).order_by(ClientMembership.created_at.desc()).limit(1)
+            )
+            m = m_result.scalar_one_or_none()
+            if m:
+                m.makeup_credits = (m.makeup_credits or 0) + 1
+                makeup_credits_added += 1
+
+    session.status = "cancelled"
+    session.enrolled_count = 0
+    await db.commit()
+
+    n = len(appts)
+    return {
+        "message": f"Sesión cancelada. {n} cita(s) cancelada(s).",
+        "appointments_cancelled": n,
+        "makeup_credits_added": makeup_credits_added,
+    }

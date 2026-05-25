@@ -5,13 +5,25 @@ from typing import Optional
 from pydantic import BaseModel, EmailStr, field_validator
 
 
+_VALID_CURRENCIES = {"COP", "MXN", "USD", "EUR", "ARS", "PEN", "CLP"}
+
+
 class SuperadminTenantCreate(BaseModel):
     tenant_name: str
     tenant_slug: str
     plan: str = "basic"
+    currency: str = "COP"
     admin_full_name: str
     admin_email: EmailStr
     admin_password: str
+
+    @field_validator("currency")
+    @classmethod
+    def validate_currency(cls, v: str) -> str:
+        v = v.upper()
+        if v not in _VALID_CURRENCIES:
+            raise ValueError(f"Moneda no soportada. Opciones: {', '.join(sorted(_VALID_CURRENCIES))}")
+        return v
 
     @field_validator("tenant_slug")
     @classmethod
@@ -34,6 +46,7 @@ class TenantResponse(BaseModel):
     name: str
     slug: str
     plan: str
+    currency: str = "COP"
     is_active: bool
     email: Optional[str] = None
     phone: Optional[str] = None

@@ -1,9 +1,10 @@
 'use client'
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { schedule, spaces } from '@/lib/api'
+import { schedule, spaces, classSessions } from '@/lib/api'
+import type { Space } from '@/types'
 import { Button } from '@/components/ui/button'
-import { CalendarDays, CheckCircle2, X } from 'lucide-react'
+import { AlertTriangle, CalendarDays, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   format, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -20,15 +21,17 @@ const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 // ─── BlockedDaysPicker ────────────────────────────────────────────────────────
 
 interface BlockedDaysPickerProps {
-  fromDate: string   // 'yyyy-MM-dd'
-  toDate: string     // 'yyyy-MM-dd'
+  fromDate: string
+  toDate: string
   blockedDates: string[]
+  holidays: Record<string, string>  // { 'yyyy-MM-dd': 'Nombre festivo' }
   onToggle: (date: string) => void
   onClear: () => void
   onAutoBlock: (dayOfWeek: number[]) => void
+  onBlockHolidays: () => void
 }
 
-function BlockedDaysPicker({ fromDate, toDate, blockedDates, onToggle, onClear, onAutoBlock }: BlockedDaysPickerProps) {
+function BlockedDaysPicker({ fromDate, toDate, blockedDates, holidays, onToggle, onClear, onAutoBlock, onBlockHolidays }: BlockedDaysPickerProps) {
   const from = parseISO(fromDate)
   const to = parseISO(toDate)
 
@@ -71,6 +74,15 @@ function BlockedDaysPicker({ fromDate, toDate, blockedDates, onToggle, onClear, 
         >
           Bloquear sáb. y dom.
         </button>
+        {Object.keys(holidays).length > 0 && (
+          <button
+            type="button"
+            onClick={onBlockHolidays}
+            className="text-xs px-3 py-1.5 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-700 transition flex items-center gap-1"
+          >
+            🇨🇴 Bloquear festivos ({Object.keys(holidays).length})
+          </button>
+        )}
         {blockedCount > 0 && (
           <button
             type="button"
@@ -81,6 +93,21 @@ function BlockedDaysPicker({ fromDate, toDate, blockedDates, onToggle, onClear, 
           </button>
         )}
       </div>
+
+      {/* Lista de festivos del rango */}
+      {Object.keys(holidays).length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {Object.entries(holidays).sort().map(([d, name]) => (
+            <span key={d} className={`text-xs px-2 py-0.5 rounded-full border ${
+              blockedDates.includes(d)
+                ? 'bg-amber-100 text-amber-700 border-amber-300 line-through'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+            }`}>
+              🎌 {format(parseISO(d), 'd MMM', { locale: es })} — {name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {/* Summary */}
       <p className="text-xs text-gray-500">
@@ -121,6 +148,7 @@ function BlockedDaysPicker({ fromDate, toDate, blockedDates, onToggle, onClear, 
                   const isBlocked = blockedSet.has(dateStr)
                   const inCurrentMonth = isSameMonth(day, monthStart)
                   const isSun = getDay(day) === 0
+                  const holidayName = holidays[dateStr]
 
                   if (!inCurrentMonth) {
                     return <div key={dateStr} />
@@ -142,16 +170,27 @@ function BlockedDaysPicker({ fromDate, toDate, blockedDates, onToggle, onClear, 
                       key={dateStr}
                       type="button"
                       onClick={() => onToggle(dateStr)}
-                      title={isBlocked ? `${dateStr} — bloqueado` : dateStr}
-                      className={`h-8 flex items-center justify-center text-xs rounded-lg font-medium transition-colors ${
+                      title={
+                        isBlocked
+                          ? `${dateStr} — bloqueado${holidayName ? ` (${holidayName})` : ''}`
+                          : holidayName
+                          ? `${holidayName}`
+                          : dateStr
+                      }
+                      className={`h-8 flex items-center justify-center text-xs rounded-lg font-medium transition-colors relative ${
                         isBlocked
                           ? 'bg-red-100 text-red-500 line-through hover:bg-red-200'
+                          : holidayName
+                          ? 'bg-amber-100 text-amber-700 ring-1 ring-amber-300 hover:bg-red-100 hover:text-red-600'
                           : isSun
                           ? 'bg-orange-50 text-orange-700 hover:bg-red-100 hover:text-red-600'
                           : 'bg-primary-50 text-primary-700 hover:bg-primary-100'
                       }`}
                     >
                       {format(day, 'd')}
+                      {holidayName && !isBlocked && (
+                        <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-amber-500 rounded-full" />
+                      )}
                     </button>
                   )
                 })}
@@ -177,6 +216,7 @@ function GenerateSessionsSection() {
   const [spaceId, setSpaceId] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<GenerateSessionsResult | null>(null)
+  const [holidays, setHolidays] = useState<Record<string, string>>({})
 
   const { data: spaceList = [] } = useQuery({
     queryKey: ['spaces'],
@@ -195,6 +235,18 @@ function GenerateSessionsSection() {
     setBlockedDates(sundays)
   }, [fromDate, toDate])
 
+  // Fetch holidays for the selected range (Colombia por defecto)
+  useEffect(() => {
+    if (!rangeReady) { setHolidays({}); return }
+    schedule.holidays({ from_date: fromDate, to_date: toDate, country: 'CO' })
+      .then(data => {
+        const map: Record<string, string> = {}
+        data.forEach(h => { map[h.date] = h.name })
+        setHolidays(map)
+      })
+      .catch(() => setHolidays({}))
+  }, [fromDate, toDate])
+
   const toggleDate = (dateStr: string) => {
     setBlockedDates(prev =>
       prev.includes(dateStr) ? prev.filter(d => d !== dateStr) : [...prev, dateStr]
@@ -210,6 +262,11 @@ function GenerateSessionsSection() {
       .filter(d => daysOfWeek.includes(getDay(d)))
       .map(d => format(d, 'yyyy-MM-dd'))
     setBlockedDates(prev => Array.from(new Set([...prev, ...toBlock])))
+  }
+
+  const blockHolidays = () => {
+    const holidayDates = Object.keys(holidays)
+    setBlockedDates(prev => Array.from(new Set([...prev, ...holidayDates])))
   }
 
   const handleGenerate = async (e: React.FormEvent) => {
@@ -329,9 +386,11 @@ function GenerateSessionsSection() {
             fromDate={fromDate}
             toDate={toDate}
             blockedDates={blockedDates}
+            holidays={holidays}
             onToggle={toggleDate}
             onClear={() => setBlockedDates([])}
             onAutoBlock={autoBlock}
+            onBlockHolidays={blockHolidays}
           />
         </div>
       )}
@@ -394,6 +453,223 @@ function GenerateSessionsSection() {
   )
 }
 
+// ─── HolidayConflictsSection ──────────────────────────────────────────────────
+
+type ConflictAppt = { id: string; client_id: string; client_name: string; status: string }
+type ConflictSession = {
+  id: string
+  start_datetime: string
+  space_name: string | null
+  class_type_name: string | null
+  enrolled_count: number
+  appointments: ConflictAppt[]
+}
+type HolidayConflict = { date: string; holiday_name: string; sessions: ConflictSession[] }
+
+function bogotaTimeStr(utcIso: string): string {
+  const dt = new Date(utcIso)
+  const h = ((dt.getUTCHours() - 5) + 24) % 24
+  return h.toString().padStart(2, '0') + ':00'
+}
+
+function HolidayConflictsSection() {
+  const today = format(new Date(), 'yyyy-MM-dd')
+  const nextMonth = format(addMonths(new Date(), 1), 'yyyy-MM-dd')
+  const [fromDate, setFromDate] = useState(today)
+  const [toDate, setToDate] = useState(nextMonth)
+  const [conflicts, setConflicts] = useState<HolidayConflict[]>([])
+  const [searched, setSearched] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [processing, setProcessing] = useState<Set<string>>(new Set())
+
+  const totalSessions = conflicts.reduce((sum, c) => sum + c.sessions.length, 0)
+
+  const doSearch = async () => {
+    setLoading(true)
+    setSearched(false)
+    try {
+      const data = await schedule.holidayConflicts({ from_date: fromDate, to_date: toDate })
+      setConflicts(data as HolidayConflict[])
+      setSearched(true)
+    } catch {
+      toast.error('Error al buscar conflictos')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const removeSession = (sessionId: string) =>
+    setConflicts(prev =>
+      prev
+        .map(c => ({ ...c, sessions: c.sessions.filter(s => s.id !== sessionId) }))
+        .filter(c => c.sessions.length > 0)
+    )
+
+  const doCancel = async (sessionId: string, addMakeup: boolean) => {
+    setProcessing(prev => new Set(prev).add(sessionId))
+    try {
+      const res = await classSessions.cancelHoliday(sessionId, { add_makeup: addMakeup })
+      const extra = addMakeup && res.makeup_credits_added > 0
+        ? ` · ${res.makeup_credits_added} crédito(s) de reposición agregado(s)`
+        : ''
+      toast.success(res.message + extra)
+      removeSession(sessionId)
+    } catch {
+      toast.error('Error al cancelar la sesión')
+    } finally {
+      setProcessing(prev => { const s = new Set(prev); s.delete(sessionId); return s })
+    }
+  }
+
+  const cancelAll = async (addMakeup: boolean) => {
+    const allIds = conflicts.flatMap(c => c.sessions.map(s => s.id))
+    for (const id of allIds) {
+      await doCancel(id, addMakeup)
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-sm text-gray-500">
+        Detecta sesiones programadas en días festivos y gestiona cancelaciones masivas con o sin crédito de reposición para cada cliente.
+      </p>
+
+      {/* Date range + search */}
+      <div className="flex flex-wrap items-end gap-3">
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Desde</label>
+          <input
+            type="date"
+            value={fromDate}
+            onChange={e => setFromDate(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-300 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">Hasta</label>
+          <input
+            type="date"
+            value={toDate}
+            min={fromDate}
+            onChange={e => setToDate(e.target.value)}
+            className="px-3 py-2 rounded-xl border border-gray-300 text-sm"
+          />
+        </div>
+        <Button type="button" onClick={doSearch} disabled={loading}>
+          {loading ? 'Buscando...' : 'Buscar conflictos'}
+        </Button>
+      </div>
+
+      {/* No conflicts */}
+      {searched && conflicts.length === 0 && (
+        <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
+          <CheckCircle2 className="w-5 h-5 text-green-600 flex-shrink-0" />
+          <p className="text-sm text-green-800 font-medium">
+            No hay sesiones programadas en días festivos en este rango. ¡Todo en orden!
+          </p>
+        </div>
+      )}
+
+      {/* Conflicts list */}
+      {conflicts.length > 0 && (
+        <div className="space-y-4">
+          {/* Bulk actions bar */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <p className="text-sm font-medium text-amber-700">
+              {totalSessions} sesión(es) en {conflicts.length} festivo(s)
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => cancelAll(true)}
+                className="text-xs px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition font-medium"
+              >
+                Cancelar todo + reposición
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelAll(false)}
+                className="text-xs px-3 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 transition"
+              >
+                Cancelar todo
+              </button>
+            </div>
+          </div>
+
+          {/* One card per holiday */}
+          {conflicts.map(conflict => (
+            <div key={conflict.date} className="border border-amber-200 rounded-2xl overflow-hidden">
+              {/* Holiday header */}
+              <div className="bg-amber-50 px-4 py-3 flex items-center gap-2">
+                <span className="text-base">🎌</span>
+                <div>
+                  <p className="text-sm font-semibold text-amber-900">{conflict.holiday_name}</p>
+                  <p className="text-xs text-amber-700">
+                    {format(parseISO(conflict.date), "EEEE d 'de' MMMM yyyy", { locale: es })}
+                    {' · '}{conflict.sessions.length} sesión(es)
+                  </p>
+                </div>
+              </div>
+
+              {/* Sessions inside the holiday */}
+              <div className="divide-y divide-gray-100">
+                {conflict.sessions.map(s => {
+                  const isProc = processing.has(s.id)
+                  const timeStr = bogotaTimeStr(s.start_datetime)
+                  return (
+                    <div key={s.id} className="px-4 py-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-gray-800">
+                            🕐 {timeStr}
+                            {s.space_name && (
+                              <span className="text-gray-500 font-normal"> · {s.space_name}</span>
+                            )}
+                            {s.class_type_name && s.class_type_name !== s.space_name && (
+                              <span className="text-gray-400 font-normal text-xs"> ({s.class_type_name})</span>
+                            )}
+                          </p>
+                          {s.appointments.length > 0 ? (
+                            <p className="text-xs text-gray-500 mt-0.5 truncate">
+                              👤 {s.appointments.map(a => a.client_name).join(', ')}
+                            </p>
+                          ) : (
+                            <p className="text-xs text-gray-400 mt-0.5">Sin clientes inscritos</p>
+                          )}
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            type="button"
+                            disabled={isProc}
+                            onClick={() => doCancel(s.id, true)}
+                            title="Cancelar y agregar crédito de reposición a cada cliente"
+                            className="text-xs px-2.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-white transition disabled:opacity-50 font-medium"
+                          >
+                            {isProc ? '...' : '+ repo'}
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isProc}
+                            onClick={() => doCancel(s.id, false)}
+                            title="Cancelar sin crédito de reposición"
+                            className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-gray-600 transition disabled:opacity-50"
+                          >
+                            {isProc ? '...' : 'Cancelar'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── HorariosPage ─────────────────────────────────────────────────────────────
 
 export default function HorariosPage() {
@@ -412,6 +688,21 @@ export default function HorariosPage() {
           </div>
         </div>
         <GenerateSessionsSection />
+      </section>
+
+      <section className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-amber-100 rounded-xl flex items-center justify-center">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Conflictos con festivos</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Gestiona sesiones programadas en días feriados.
+            </p>
+          </div>
+        </div>
+        <HolidayConflictsSection />
       </section>
     </div>
   )

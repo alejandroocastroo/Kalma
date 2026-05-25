@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from pydantic import BaseModel as PydanticBaseModel
 
 from app.database import get_db
 from app.limiter import limiter
@@ -36,9 +37,12 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     await redis.setex(f"{REFRESH_TOKEN_PREFIX}{jti}", _REFRESH_TTL, str(user.id))
 
     tenant_slug = None
+    tenant_currency = "COP"
     if user.tenant_id:
         t = await db.get(Tenant, user.tenant_id)
-        tenant_slug = t.slug if t else None
+        if t:
+            tenant_slug = t.slug
+            tenant_currency = t.currency or "COP"
 
     return TokenResponse(
         access_token=access_token,
@@ -49,6 +53,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         user_role=user.role,
         tenant_id=str(user.tenant_id) if user.tenant_id else None,
         tenant_slug=tenant_slug,
+        tenant_currency=tenant_currency,
     )
 
 
@@ -85,9 +90,12 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     await redis.setex(f"{REFRESH_TOKEN_PREFIX}{new_jti}", _REFRESH_TTL, str(user.id))
 
     tenant_slug = None
+    tenant_currency = "COP"
     if user.tenant_id:
         t = await db.get(Tenant, user.tenant_id)
-        tenant_slug = t.slug if t else None
+        if t:
+            tenant_slug = t.slug
+            tenant_currency = t.currency or "COP"
 
     return TokenResponse(
         access_token=access_token,
@@ -98,6 +106,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         user_role=user.role,
         tenant_id=str(user.tenant_id) if user.tenant_id else None,
         tenant_slug=tenant_slug,
+        tenant_currency=tenant_currency,
     )
 
 
@@ -116,11 +125,52 @@ async def logout(body: RefreshRequest):
 
 
 @router.get("/me")
-async def me(current_user=Depends(get_current_active_user)):
+async def me(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_active_user)):
+    from app.models.tenant import Tenant
+    tenant_currency = "COP"
+    if current_user.tenant_id:
+        t = await db.get(Tenant, current_user.tenant_id)
+        if t:
+            tenant_currency = t.currency or "COP"
     return {
         "id": str(current_user.id),
         "email": current_user.email,
         "full_name": current_user.full_name,
         "role": current_user.role,
         "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else None,
+        "tenant_currency": tenant_currency,
     }
+
+
+_VALID_CURRENCIES = {"COP", "MXN", "USD", "EUR", "ARS", "PEN", "CLP"}
+
+
+class TenantSettingsUpdate(PydanticBaseModel):
+    currency: str
+
+
+@router.put("/tenant-settings")
+async def update_tenant_settings(
+    body: TenantSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Actualiza la moneda del tenant. Solo admins."""
+    from app.models.tenant import Tenant
+
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    if current_user.role not in ("admin", "superadmin"):
+        raise HTTPException(403, "Se requiere rol de administrador")
+
+    currency = body.currency.upper()
+    if currency not in _VALID_CURRENCIES:
+        raise HTTPException(400, f"Moneda '{currency}' no válida. Opciones: {', '.join(sorted(_VALID_CURRENCIES))}")
+
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+
+    tenant.currency = currency
+    await db.commit()
+    return {"currency": tenant.currency, "message": "Moneda actualizada"}

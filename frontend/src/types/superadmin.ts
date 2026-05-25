@@ -3,6 +3,7 @@ export interface SuperadminTenant {
   name: string
   slug: string
   plan: string
+  currency: string
   is_active: boolean
   email?: string
   phone?: string
@@ -14,6 +15,7 @@ export interface CreateTenantPayload {
   tenant_name: string
   tenant_slug: string
   plan: string
+  currency: string
   admin_full_name: string
   admin_email: string
   admin_password: string

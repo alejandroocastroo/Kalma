@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCOP } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale } from '@/lib/utils'
+import { getTenantCurrency } from '@/lib/auth'
+import { CurrencyInput } from '@/components/ui/currency-input'
 import { Plus, Users, DollarSign, Edit, Trash2, Building2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Space } from '@/types'
@@ -120,7 +122,7 @@ export default function EspaciosPage() {
                 </div>
                 <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
                   <DollarSign className="w-4 h-4 text-green-600" />
-                  {formatCOP(space.price)}
+                  {formatCurrency(space.price, getTenantCurrency())}
                 </div>
               </div>
 
@@ -144,11 +146,12 @@ export default function EspaciosPage() {
 }
 
 function SpaceForm({ initial, onClose }: { initial: Space | null; onClose: () => void }) {
+  const currency = getTenantCurrency()
   const [form, setForm] = useState({
     name: initial?.name || '',
     description: initial?.description || '',
     capacity: String(initial?.capacity || 10),
-    price: String(initial?.price || ''),
+    price: initial?.price ? new Intl.NumberFormat(getCurrencyLocale(currency)).format(initial.price) : '',
   })
   const [loading, setLoading] = useState(false)
 
@@ -169,8 +172,8 @@ function SpaceForm({ initial, onClose }: { initial: Space | null; onClose: () =>
         name: form.name,
         description: form.description || undefined,
         capacity: parseInt(form.capacity),
-        price: parseFloat(form.price),
-        currency: 'COP',
+        price: parseInt(form.price.replace(/\D/g, ''), 10) || 0,
+        currency,
       }
       if (initial) {
         await spaces.update(initial.id, data)
@@ -209,13 +212,9 @@ function SpaceForm({ initial, onClose }: { initial: Space | null; onClose: () =>
           <Input type="number" min="1" value={form.capacity} onChange={f('capacity')} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Precio (COP) *</label>
-          <Input type="number" min="0" placeholder="120000" value={form.price} onChange={f('price')} />
+          <label className="block text-sm font-medium text-gray-700 mb-1">Precio ({currency}) *</label>
+          <CurrencyInput value={form.price} onChange={v => setForm({ ...form, price: v })} currency={currency} placeholder="120.000" />
         </div>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
-        <Input value="COP" disabled className="bg-gray-50 text-gray-500 cursor-not-allowed" />
       </div>
       <div className="flex gap-2 pt-2">
         <Button type="submit" disabled={loading}>

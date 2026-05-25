@@ -7,6 +7,39 @@ DAY_MAP = {
 }
 
 
+def calculate_expiry_date_hybrid(start_date: date, space_quotas: list) -> date:
+    """
+    Para hybrid_fixed: cuenta visitas por weekday sumando todos los espacios.
+    Si Mantra=[Lun,Mié] y Balance=[Lun,Jue,Vie] → {0:2, 2:1, 3:1, 4:1} visitas/semana.
+    Total = sum(sessions_per_week) * 4.
+    Necesita visits_per_weekday (no unión de días) porque un día puede tener visitas a 2 espacios.
+    """
+    visits_per_weekday: dict[int, int] = {}
+    total_target = 0
+    for quota in space_quotas or []:
+        spw = quota.get("sessions_per_week", 0)
+        total_target += spw * 4
+        for d in quota.get("scheduled_days") or []:
+            wd = DAY_MAP.get(d)
+            if wd is not None:
+                visits_per_weekday[wd] = visits_per_weekday.get(wd, 0) + 1
+    if not visits_per_weekday or total_target <= 0:
+        return start_date
+    count = 0
+    current = start_date
+    while count < total_target:
+        count += visits_per_weekday.get(current.weekday(), 0)
+        if count >= total_target:
+            return current
+        current += timedelta(days=1)
+    return start_date
+
+
+def initial_space_usage(space_quotas: list) -> dict:
+    """Inicializa el contador de uso por espacio a 0."""
+    return {str(q["space_id"]): 0 for q in (space_quotas or [])}
+
+
 def calculate_expiry_date(start_date: date, scheduled_days: List[str], total_sessions: int) -> date:
     """
     Calcula expiry_date recorriendo el calendario desde start_date,
@@ -70,7 +103,17 @@ def get_membership_status(membership) -> str:
         if membership.expiry_date and membership.expiry_date < today:
             return 'expired'
         return 'active'
-    else:  # weekly_sessions — se comporta como monthly
+    elif membership.membership_type == 'hybrid_fixed':
+        bonus = getattr(membership, 'bonus_sessions', 0) or 0
+        sessions_remaining = None
+        if membership.total_sessions is not None:
+            sessions_remaining = membership.total_sessions + bonus - (membership.sessions_used or 0)
+        if sessions_remaining is not None and sessions_remaining <= 0:
+            return 'completed'
+        if membership.expiry_date and membership.expiry_date < today:
+            return 'expired'
+        return 'active'
+    else:  # weekly_sessions, hybrid_monthly — se comportan como monthly
         if membership.next_billing_date and membership.next_billing_date <= today:
             return 'expired'
         return 'active'
@@ -98,7 +141,7 @@ def get_cobros_priority(membership, today: date) -> int:
         if delta <= 7:
             return 3
         return 4
-    elif membership.membership_type == 'session_based':
+    elif membership.membership_type in ('session_based', 'hybrid_fixed'):
         bonus = getattr(membership, 'bonus_sessions', 0) or 0
         sessions_rem = (membership.total_sessions or 0) + bonus - (membership.sessions_used or 0)
         if sessions_rem <= 0:
@@ -112,7 +155,7 @@ def get_cobros_priority(membership, today: date) -> int:
             if delta <= 7:
                 return 3
         return 4
-    else:  # weekly_sessions — se comporta como monthly en cobros
+    else:  # weekly_sessions, hybrid_monthly — se comportan como monthly en cobros
         billing_ref = membership.next_billing_date or membership.end_date
         if billing_ref is None:
             return 4

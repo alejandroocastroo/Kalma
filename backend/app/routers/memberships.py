@@ -22,7 +22,11 @@ from app.schemas.client_membership import (
     ClientMembershipCreate, ClientMembershipUpdate, ClientMembershipResponse,
     WeeklyStatsResponse, AddMakeupBody, AutoBookResponse,
 )
-from app.utils.membership_calc import calculate_expiry_date, calculate_next_billing_date
+from app.utils.membership_calc import (
+    calculate_expiry_date, calculate_next_billing_date,
+    calculate_expiry_date_hybrid, initial_space_usage,
+)
+from app.utils.attendance import apply_attendance
 
 router = APIRouter(prefix="/memberships", tags=["Membresías"])
 
@@ -40,6 +44,7 @@ class MakeupSessionCreate(BaseModel):
     original_date: date
     makeup_date: Optional[date] = None
     class_session_id: Optional[uuid.UUID] = None
+    space_id: Optional[uuid.UUID] = None
     notes: Optional[str] = None
 
 
@@ -56,21 +61,30 @@ class MakeupSessionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class SpaceQuotaInput(BaseModel):
+    space_id: uuid.UUID
+    sessions_per_week: int
+    scheduled_days: Optional[List[str]] = None  # solo hybrid_fixed
+
+
 class MembershipCreateV2(BaseModel):
     client_id: uuid.UUID
     plan_id: uuid.UUID
-    membership_type: str = "monthly"  # monthly | session_based
+    membership_type: str = "monthly"  # monthly | session_based | weekly_sessions | hybrid_fixed | hybrid_monthly
     start_date: date
     # monthly
     billing_day: Optional[int] = None  # auto-derivado de start_date
     # session_based
     sessions_per_week: Optional[int] = None
     scheduled_days: Optional[List[str]] = None  # ["monday", "tuesday"]
+    # hybrid
+    space_quotas: Optional[List[SpaceQuotaInput]] = None
     makeups_allowed: int = 1
     notes: Optional[str] = None
     preferred_days: Optional[List[int]] = None
     preferred_hour: Optional[int] = None
     preferred_space_id: Optional[uuid.UUID] = None
+    preferred_schedule: Optional[List[dict]] = None  # [{"day":0,"hour":9},...] solo session_based
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +112,9 @@ def _enrich_loaded(m: ClientMembership) -> dict:
     data["makeups_allowed"] = m.makeups_allowed
     data["makeups_used"] = m.makeups_used
     data["bonus_sessions"] = m.bonus_sessions or 0
+    data["space_quotas"] = m.space_quotas
+    data["space_usage"] = m.space_usage
+    data["preferred_schedule"] = m.preferred_schedule
     data["sessions_remaining"] = (
         m.total_sessions + (m.bonus_sessions or 0) - (m.sessions_used or 0)
         if m.total_sessions is not None else None
@@ -140,6 +157,9 @@ async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
     data["makeups_allowed"] = m.makeups_allowed
     data["makeups_used"] = m.makeups_used
     data["bonus_sessions"] = m.bonus_sessions or 0
+    data["space_quotas"] = m.space_quotas
+    data["space_usage"] = m.space_usage
+    data["preferred_schedule"] = m.preferred_schedule
     data["sessions_remaining"] = (
         m.total_sessions + (m.bonus_sessions or 0) - (m.sessions_used or 0)
         if m.total_sessions is not None else None
@@ -173,18 +193,7 @@ async def auto_deduct(
     appointments = result.scalars().all()
     for appt in appointments:
         appt.status = "attended"
-        # Increment sessions_used on active session-tracking membership
-        mem_result = await db.execute(
-            select(ClientMembership).where(
-                ClientMembership.client_id == appt.client_id,
-                ClientMembership.tenant_id == appt.tenant_id,
-                ClientMembership.status == "active",
-                ClientMembership.membership_type.in_(["session_based", "weekly_sessions"]),
-            ).order_by(ClientMembership.created_at.desc()).limit(1)
-        )
-        membership = mem_result.scalar_one_or_none()
-        if membership:
-            membership.sessions_used = (membership.sessions_used or 0) + 1
+        await apply_attendance(db, appt)
     await db.commit()
     return {"updated": len(appointments)}
 
@@ -315,8 +324,41 @@ async def create_membership_v2(
         data["total_sessions"] = body.sessions_per_week * 4
         data["scheduled_days"] = None
         data["expiry_date"] = None
+    elif body.membership_type == "hybrid_fixed":
+        if not body.space_quotas or len(body.space_quotas) < 2:
+            raise HTTPException(400, "hybrid_fixed requiere al menos 2 entries en space_quotas")
+        for q in body.space_quotas:
+            if not q.scheduled_days or len(q.scheduled_days) != q.sessions_per_week:
+                raise HTTPException(
+                    400,
+                    f"Para hybrid_fixed, cada espacio requiere scheduled_days con exactamente sessions_per_week días "
+                    f"(espacio {q.space_id}: esperados {q.sessions_per_week}, recibidos {len(q.scheduled_days or [])})"
+                )
+        quotas_raw = [{**q.model_dump(), "space_id": str(q.space_id)} for q in body.space_quotas]
+        total_spw = sum(q.sessions_per_week for q in body.space_quotas)
+        data["space_quotas"] = quotas_raw
+        data["total_sessions"] = total_spw * 4
+        data["sessions_per_week"] = total_spw
+        data["space_usage"] = initial_space_usage(quotas_raw)
+        data["expiry_date"] = calculate_expiry_date_hybrid(body.start_date, quotas_raw)
+        data["billing_day"] = None
+        data["next_billing_date"] = None
+        data["scheduled_days"] = None
+    elif body.membership_type == "hybrid_monthly":
+        if not body.space_quotas or len(body.space_quotas) < 2:
+            raise HTTPException(400, "hybrid_monthly requiere al menos 2 entries en space_quotas")
+        quotas_raw = [{**q.model_dump(), "space_id": str(q.space_id)} for q in body.space_quotas]
+        total_spw = sum(q.sessions_per_week for q in body.space_quotas)
+        data["space_quotas"] = quotas_raw
+        data["total_sessions"] = total_spw * 4
+        data["sessions_per_week"] = total_spw
+        data["space_usage"] = initial_space_usage(quotas_raw)
+        data["billing_day"] = body.start_date.day
+        data["next_billing_date"] = calculate_next_billing_date(body.start_date)
+        data["scheduled_days"] = None
+        data["expiry_date"] = None
     else:
-        raise HTTPException(400, f"membership_type inválido: {body.membership_type}. Use 'monthly', 'session_based' o 'weekly_sessions'")
+        raise HTTPException(400, f"membership_type inválido: {body.membership_type}. Use 'monthly', 'session_based', 'weekly_sessions', 'hybrid_fixed' o 'hybrid_monthly'")
 
     m = ClientMembership(tenant_id=current_user.tenant_id, **data)
     db.add(m)
@@ -376,6 +418,24 @@ async def renew_membership(
         m.billing_day = body.start_date.day
         m.next_billing_date = calculate_next_billing_date(body.start_date)
         m.total_sessions = (m.sessions_per_week or 0) * 4
+        m.expiry_date = None
+    elif m.membership_type == "hybrid_fixed":
+        quotas = m.space_quotas or []
+        total_spw = sum(q.get("sessions_per_week", 0) for q in quotas)
+        m.total_sessions = total_spw * 4
+        m.sessions_per_week = total_spw
+        m.expiry_date = calculate_expiry_date_hybrid(body.start_date, quotas)
+        m.space_usage = initial_space_usage(quotas)
+        m.billing_day = None
+        m.next_billing_date = None
+    elif m.membership_type == "hybrid_monthly":
+        quotas = m.space_quotas or []
+        total_spw = sum(q.get("sessions_per_week", 0) for q in quotas)
+        m.total_sessions = total_spw * 4
+        m.sessions_per_week = total_spw
+        m.billing_day = body.start_date.day
+        m.next_billing_date = calculate_next_billing_date(body.start_date)
+        m.space_usage = initial_space_usage(quotas)
         m.expiry_date = None
 
     await db.commit()
@@ -456,10 +516,17 @@ async def create_makeup_session(
     if m.makeups_used >= m.makeups_allowed:
         raise HTTPException(400, f"Se alcanzó el límite de reposiciones ({m.makeups_allowed})")
 
-    # Para session_based: extender expiry_date si makeup_date es posterior
-    if m.membership_type == "session_based" and body.makeup_date:
+    # Para session_based y hybrid_fixed: extender expiry_date si makeup_date es posterior
+    if m.membership_type in ("session_based", "hybrid_fixed") and body.makeup_date:
         if m.expiry_date is None or body.makeup_date > m.expiry_date:
             m.expiry_date = body.makeup_date
+
+    # Derivar space_id del class_session si no viene explícito
+    space_id = body.space_id
+    if space_id is None and body.class_session_id:
+        cs = await db.get(ClassSession, body.class_session_id)
+        if cs:
+            space_id = cs.space_id
 
     makeup = MakeupSession(
         tenant_id=current_user.tenant_id,
@@ -468,6 +535,7 @@ async def create_makeup_session(
         original_date=body.original_date,
         makeup_date=body.makeup_date,
         class_session_id=body.class_session_id,
+        space_id=space_id,
         notes=body.notes,
         status="pending",
     )
@@ -638,36 +706,61 @@ async def auto_book_membership(
     m = await db.get(ClientMembership, uuid.UUID(membership_id))
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
-    if not m.preferred_days or m.preferred_hour is None:
+    if m.membership_type == "hybrid_monthly":
+        raise HTTPException(400, "Auto-book no disponible para planes híbridos sin días fijos. Reserve manualmente desde la agenda.")
+
+    # Construir lista de (space_id | None, weekday, hour):
+    # - preferred_schedule con space_id: hybrid_fixed → cada entrada lleva su espacio
+    # - preferred_schedule sin space_id: session_based → filtrar por preferred_space_id global
+    # - fallback legacy: preferred_days + preferred_hour
+    ScheduleEntry = tuple  # (space_id_str | None, weekday, hour)
+    schedule_entries: list[ScheduleEntry] = []
+
+    if m.preferred_schedule:
+        for e in m.preferred_schedule:
+            sid = e.get("space_id")  # str uuid o None
+            schedule_entries.append((sid, int(e["day"]), int(e["hour"])))
+    elif m.preferred_days and m.preferred_hour is not None:
+        global_space = str(m.preferred_space_id) if m.preferred_space_id else None
+        for d in m.preferred_days:
+            schedule_entries.append((global_space, d, m.preferred_hour))
+
+    if not schedule_entries:
         raise HTTPException(400, "La membresía no tiene horario fijo configurado")
 
-    # Rango: hoy hasta fin del mes actual
+    # Rango: session_based y hybrid_fixed hasta expiry_date; resto fin del mes
     today = date.today()
-    last_day = monthrange(today.year, today.month)[1]
     range_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
-    range_end = datetime(today.year, today.month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+    if m.membership_type in ("session_based", "hybrid_fixed") and m.expiry_date:
+        range_end = datetime(m.expiry_date.year, m.expiry_date.month, m.expiry_date.day,
+                             23, 59, 59, tzinfo=timezone.utc)
+    else:
+        last_day = monthrange(today.year, today.month)[1]
+        range_end = datetime(today.year, today.month, last_day, 23, 59, 59, tzinfo=timezone.utc)
 
-    # Buscar sesiones en el rango con el espacio y hora correctos
     q = select(ClassSession).where(
         ClassSession.tenant_id == current_user.tenant_id,
         ClassSession.status != "cancelled",
         ClassSession.start_datetime >= range_start,
         ClassSession.start_datetime <= range_end,
     )
-    if m.preferred_space_id:
+    # Para session_based legacy con espacio global lo filtramos aquí; para hybrid no filtramos (cada entrada tiene su space_id)
+    if m.membership_type not in ("hybrid_fixed",) and m.preferred_space_id and not m.preferred_schedule:
         q = q.where(ClassSession.space_id == m.preferred_space_id)
 
     result = await db.execute(q)
     sessions = result.scalars().all()
 
-    # Filtrar por día de semana y hora — comparar en hora local Colombia (UTC-5)
-    matching = [
-        s for s in sessions
-        if s.start_datetime.astimezone(BOGOTA_TZ).weekday() in m.preferred_days
-        and s.start_datetime.astimezone(BOGOTA_TZ).hour == m.preferred_hour
-    ]
+    def _matches(s: ClassSession) -> bool:
+        local = s.start_datetime.astimezone(BOGOTA_TZ)
+        for (sid, wd, hr) in schedule_entries:
+            if local.weekday() == wd and local.hour == hr:
+                if sid is None or str(s.space_id) == sid:
+                    return True
+        return False
 
-    # Obtener citas existentes del cliente para no duplicar
+    matching = [s for s in sessions if _matches(s)]
+
     existing_q = select(Appointment.class_session_id).where(
         Appointment.client_id == m.client_id,
         Appointment.tenant_id == current_user.tenant_id,
@@ -687,7 +780,6 @@ async def auto_book_membership(
         if session.enrolled_count >= session.capacity:
             skipped += 1
             continue
-        # Crear appointment
         appt = Appointment(
             tenant_id=current_user.tenant_id,
             class_session_id=session.id,

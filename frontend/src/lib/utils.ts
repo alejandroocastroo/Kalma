@@ -10,14 +10,51 @@ export function cn(...inputs: ClassValue[]) {
 
 const BOGOTA_TZ = 'America/Bogota'
 
-export function formatCOP(amount: number | string): string {
+// ─── Moneda ───────────────────────────────────────────────────────────────────
+
+const CURRENCY_LOCALES: Record<string, string> = {
+  COP: 'es-CO',
+  MXN: 'es-MX',
+  USD: 'en-US',
+  EUR: 'es-ES',
+  ARS: 'es-AR',
+  PEN: 'es-PE',
+  CLP: 'es-CL',
+}
+
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  COP: '$', MXN: '$', USD: '$', EUR: '€', ARS: '$', PEN: 'S/', CLP: '$',
+}
+
+export const CURRENCY_OPTIONS = [
+  { value: 'COP', label: 'Peso colombiano (COP)', example: '$150.000' },
+  { value: 'MXN', label: 'Peso mexicano (MXN)', example: '$150,000' },
+  { value: 'USD', label: 'Dólar estadounidense (USD)', example: '$150,000' },
+  { value: 'EUR', label: 'Euro (EUR)', example: '€150.000' },
+  { value: 'ARS', label: 'Peso argentino (ARS)', example: '$150.000' },
+  { value: 'PEN', label: 'Sol peruano (PEN)', example: 'S/150,000' },
+  { value: 'CLP', label: 'Peso chileno (CLP)', example: '$150.000' },
+]
+
+export function formatCurrency(amount: number | string, currency = 'COP'): string {
   const num = typeof amount === 'string' ? parseFloat(amount) : amount
-  return new Intl.NumberFormat('es-CO', {
-    style: 'currency',
-    currency: 'COP',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(num)
+  if (isNaN(num)) return `${CURRENCY_SYMBOLS[currency] || '$'}0`
+  const locale = CURRENCY_LOCALES[currency] || 'es-CO'
+  const symbol = CURRENCY_SYMBOLS[currency] || '$'
+  return symbol + new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(num)
+}
+
+export function getCurrencyLocale(currency: string): string {
+  return CURRENCY_LOCALES[currency] || 'es-CO'
+}
+
+export function getCurrencySymbol(currency: string): string {
+  return CURRENCY_SYMBOLS[currency] || '$'
+}
+
+// Backward-compat alias — siempre formatea en COP
+export function formatCOP(amount: number | string): string {
+  return formatCurrency(amount, 'COP')
 }
 
 export function formatDate(dateStr: string): string {
@@ -94,6 +131,7 @@ export const categoryLabels: Record<string, string> = {
   clase_privada: 'Clase privada',
   paquete_sesiones: 'Paquete de sesiones',
   membresia: 'Membresía',
+  membresia_hibrida: 'Membresía Híbrida',
   inscripcion: 'Inscripción / matrícula',
   otro_ingreso: 'Otro ingreso',
   // Egresos
