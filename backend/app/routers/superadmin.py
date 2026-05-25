@@ -78,6 +78,27 @@ async def create_tenant(
     )
 
 
+@router.patch("/tenants/{tenant_id}/currency", response_model=TenantResponse)
+async def update_tenant_currency(
+    tenant_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_superadmin),
+):
+    from app.schemas.superadmin import _VALID_CURRENCIES
+    currency = str(body.get("currency", "")).upper()
+    if currency not in _VALID_CURRENCIES:
+        raise HTTPException(400, f"Moneda no soportada. Opciones: {', '.join(sorted(_VALID_CURRENCIES))}")
+    tenant = await db.get(Tenant, uuid.UUID(tenant_id))
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    tenant.currency = currency
+    tenant.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
 @router.patch("/tenants/{tenant_id}/toggle", response_model=TenantResponse)
 async def toggle_tenant(
     tenant_id: str,

@@ -67,6 +67,8 @@ export const superadminApi = {
       client.post('/superadmin/tenants', data).then((r) => r.data),
     toggle: (id: string) =>
       client.patch<SuperadminTenant>(`/superadmin/tenants/${id}/toggle`).then((r) => r.data),
+    updateCurrency: (id: string, currency: string) =>
+      client.patch<SuperadminTenant>(`/superadmin/tenants/${id}/currency`, { currency }).then((r) => r.data),
     stats: (id: string) =>
       client.get<TenantStats>(`/superadmin/tenants/${id}/stats`).then((r) => r.data),
   },

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Plus, Building2, PowerOff, Power } from 'lucide-react'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Plus, Building2, PowerOff, Power, Pencil } from 'lucide-react'
 import { toast } from 'sonner'
 import { CreateTenantModal } from './create-tenant-modal'
 import type { SuperadminTenant } from '@/types/superadmin'
@@ -17,8 +18,61 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: 'Enterprise',
 }
 
+const CURRENCY_OPTIONS = [
+  { value: 'COP', label: 'COP — Peso colombiano' },
+  { value: 'MXN', label: 'MXN — Peso mexicano' },
+  { value: 'USD', label: 'USD — Dólar estadounidense' },
+  { value: 'EUR', label: 'EUR — Euro' },
+  { value: 'ARS', label: 'ARS — Peso argentino' },
+  { value: 'PEN', label: 'PEN — Sol peruano' },
+  { value: 'CLP', label: 'CLP — Peso chileno' },
+]
+
+function EditCurrencyModal({ tenant, onClose }: { tenant: SuperadminTenant; onClose: () => void }) {
+  const qc = useQueryClient()
+  const [currency, setCurrency] = useState(tenant.currency || 'COP')
+
+  const mutation = useMutation({
+    mutationFn: () => superadminApi.tenants.updateCurrency(tenant.id, currency),
+    onSuccess: () => {
+      toast.success(`Moneda de "${tenant.name}" actualizada a ${currency}`)
+      qc.invalidateQueries({ queryKey: ['superadmin-tenants'] })
+      onClose()
+    },
+    onError: () => toast.error('Error al actualizar la moneda'),
+  })
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-sm text-gray-500 mb-3">
+          Cambia la moneda del estudio <span className="font-semibold text-gray-900">{tenant.name}</span>.
+          Esto afecta cómo se muestran los precios en toda la aplicación.
+        </p>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Moneda</label>
+        <select
+          value={currency}
+          onChange={e => setCurrency(e.target.value)}
+          className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          {CURRENCY_OPTIONS.map(opt => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex gap-2 pt-1">
+        <Button onClick={() => mutation.mutate()} disabled={mutation.isPending}>
+          {mutation.isPending ? 'Guardando...' : 'Guardar'}
+        </Button>
+        <Button variant="outline" onClick={onClose}>Cancelar</Button>
+      </div>
+    </div>
+  )
+}
+
 export default function TenantsPage() {
   const [showCreate, setShowCreate] = useState(false)
+  const [editingCurrency, setEditingCurrency] = useState<SuperadminTenant | null>(null)
   const qc = useQueryClient()
 
   const { data: tenants = [], isLoading } = useQuery({
@@ -56,6 +110,7 @@ export default function TenantsPage() {
               <TableHead>Estudio</TableHead>
               <TableHead>Slug</TableHead>
               <TableHead>Plan</TableHead>
+              <TableHead>Moneda</TableHead>
               <TableHead>Estado</TableHead>
               <TableHead>Creado</TableHead>
               <TableHead className="text-right">Acciones</TableHead>
@@ -65,7 +120,7 @@ export default function TenantsPage() {
             {isLoading
               ? Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((_, j) => (
+                    {Array.from({ length: 7 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                     ))}
                   </TableRow>
@@ -92,6 +147,18 @@ export default function TenantsPage() {
                       <Badge variant={tenant.plan === 'pro' ? 'default' : 'secondary'}>
                         {PLAN_LABELS[tenant.plan] || tenant.plan}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <button
+                        onClick={() => setEditingCurrency(tenant)}
+                        className="flex items-center gap-1.5 text-sm font-medium text-gray-700 hover:text-indigo-600 transition group"
+                        title="Cambiar moneda"
+                      >
+                        <span className="bg-gray-100 group-hover:bg-indigo-50 px-2 py-0.5 rounded text-xs font-mono">
+                          {tenant.currency || 'COP'}
+                        </span>
+                        <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-100 transition" />
+                      </button>
                     </TableCell>
                     <TableCell>
                       <Badge variant={tenant.is_active ? 'success' : 'secondary'}>
@@ -121,7 +188,7 @@ export default function TenantsPage() {
                 ))}
             {!isLoading && tenants.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="text-center text-gray-400 text-sm py-12">
+                <TableCell colSpan={7} className="text-center text-gray-400 text-sm py-12">
                   No hay tenants registrados. Crea el primero.
                 </TableCell>
               </TableRow>
@@ -131,6 +198,14 @@ export default function TenantsPage() {
       </div>
 
       <CreateTenantModal open={showCreate} onClose={() => setShowCreate(false)} />
+
+      <Dialog open={!!editingCurrency} onOpenChange={o => { if (!o) setEditingCurrency(null) }}>
+        <DialogContent title={`Moneda — ${editingCurrency?.name}`}>
+          {editingCurrency && (
+            <EditCurrencyModal tenant={editingCurrency} onClose={() => setEditingCurrency(null)} />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

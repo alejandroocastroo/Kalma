@@ -15,7 +15,6 @@ const pageTitles: Record<string, string> = {
   '/admin/cobros': 'Cobros',
   '/admin/espacios': 'Espacios',
   '/admin/horarios': 'Configuración de Horarios',
-  '/admin/configuracion': 'Configuración',
 }
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
