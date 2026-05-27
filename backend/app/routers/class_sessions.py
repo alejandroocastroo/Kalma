@@ -65,6 +65,71 @@ async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
     return data
 
 
+class CheckScheduleRequest(BaseModel):
+    start_date: str          # ISO date string "YYYY-MM-DD"
+    schedule: List[dict]     # [{"day": 0, "hour": 9, "space_id": "uuid-or-null"}]
+    weeks_ahead: int = 10    # cuántas semanas hacia adelante verificar
+
+
+@router.post("/check-schedule")
+async def check_schedule_availability(
+    body: CheckScheduleRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """
+    Verifica si existen sesiones creadas que coincidan con el horario configurado.
+    Retorna cuántas sesiones se encontraron y las primeras fechas para contexto.
+    """
+    from datetime import date as date_type
+    BOGOTA_TZ = timezone(timedelta(hours=-5))
+
+    try:
+        sd = date_type.fromisoformat(body.start_date)
+    except ValueError:
+        raise HTTPException(400, "start_date inválido")
+
+    start_dt = datetime(sd.year, sd.month, sd.day, tzinfo=timezone.utc)
+    end_dt = start_dt + timedelta(weeks=body.weeks_ahead)
+
+    # Espacios involucrados en el schedule
+    space_ids = {e["space_id"] for e in body.schedule if e.get("space_id")}
+
+    q = select(ClassSession).where(
+        ClassSession.tenant_id == current_user.tenant_id,
+        ClassSession.status != "cancelled",
+        ClassSession.start_datetime >= start_dt,
+        ClassSession.start_datetime <= end_dt,
+    )
+    if space_ids:
+        q = q.where(ClassSession.space_id.in_([uuid.UUID(sid) for sid in space_ids]))
+
+    sessions = (await db.execute(q)).scalars().all()
+
+    # Construir set de (weekday, hour, space_id|None) para match rápido
+    schedule_set: set[tuple] = set()
+    for e in body.schedule:
+        wd = e.get("day")
+        hr = e.get("hour")
+        sid = e.get("space_id") or None
+        if wd is not None and hr is not None and hr != "":
+            schedule_set.add((int(wd), int(hr), sid))
+
+    matching_dates: list[str] = []
+    for s in sessions:
+        local = s.start_datetime.astimezone(BOGOTA_TZ)
+        key_with_space = (local.weekday(), local.hour, str(s.space_id) if s.space_id else None)
+        key_no_space = (local.weekday(), local.hour, None)
+        if key_with_space in schedule_set or key_no_space in schedule_set:
+            matching_dates.append(local.strftime("%Y-%m-%d %H:%M"))
+
+    matching_dates.sort()
+    return {
+        "sessions_found": len(matching_dates),
+        "matching_dates": matching_dates[:5],  # primeras 5 para mostrar al admin
+    }
+
+
 @router.get("", response_model=List[ClassSessionResponse])
 async def list_sessions(
     start: Optional[str] = None,

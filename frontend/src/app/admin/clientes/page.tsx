@@ -197,13 +197,19 @@ export default function ClientesPage() {
                   <div className="space-y-2">
                     {clientAppointments.map((appt: any) => {
                       const cfg = appointmentStatusConfig[appt.status]
+                      const dt = appt.session_start ? new Date(appt.session_start) : null
+                      const dateStr = dt ? dt.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+                      const timeStr = dt ? dt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
                       return (
-                        <div key={appt.id} className="flex items-center justify-between py-2 border-b border-gray-50">
+                        <div key={appt.id} className="flex items-start justify-between py-2 border-b border-gray-50">
                           <div>
-                            <p className="text-sm font-medium">{appt.class_type_name}</p>
-                            <p className="text-xs text-gray-500">{appt.session_start ? formatDate(appt.session_start) : '—'}</p>
+                            <p className="text-sm font-medium text-gray-800">{appt.class_type_name || '—'}</p>
+                            <p className="text-xs text-gray-500">
+                              {dateStr}{timeStr ? ` · ${timeStr}` : ''}
+                              {appt.space_name ? <span className="ml-1 text-gray-400">· {appt.space_name}</span> : null}
+                            </p>
                           </div>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg?.className}`}>
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ml-2 ${cfg?.className}`}>
                             {cfg?.label}
                           </span>
                         </div>

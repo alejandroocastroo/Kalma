@@ -717,8 +717,10 @@ async def auto_book_membership(
     schedule_entries: list[ScheduleEntry] = []
 
     if m.preferred_schedule:
+        # Si las entradas no tienen space_id propio, usar preferred_space_id global como fallback
+        global_sid = str(m.preferred_space_id) if m.preferred_space_id else None
         for e in m.preferred_schedule:
-            sid = e.get("space_id")  # str uuid o None
+            sid = e.get("space_id") or global_sid
             schedule_entries.append((sid, int(e["day"]), int(e["hour"])))
     elif m.preferred_days and m.preferred_hour is not None:
         global_space = str(m.preferred_space_id) if m.preferred_space_id else None
@@ -730,7 +732,9 @@ async def auto_book_membership(
 
     # Rango: session_based y hybrid_fixed hasta expiry_date; resto fin del mes
     today = date.today()
-    range_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+    # Respetar start_date: no agendar sesiones antes de que la membresía inicie
+    effective_start = max(today, m.start_date) if m.start_date else today
+    range_start = datetime(effective_start.year, effective_start.month, effective_start.day, tzinfo=timezone.utc)
     if m.membership_type in ("session_based", "hybrid_fixed") and m.expiry_date:
         range_end = datetime(m.expiry_date.year, m.expiry_date.month, m.expiry_date.day,
                              23, 59, 59, tzinfo=timezone.utc)
@@ -744,9 +748,14 @@ async def auto_book_membership(
         ClassSession.start_datetime >= range_start,
         ClassSession.start_datetime <= range_end,
     )
-    # Para session_based legacy con espacio global lo filtramos aquí; para hybrid no filtramos (cada entrada tiene su space_id)
-    if m.membership_type not in ("hybrid_fixed",) and m.preferred_space_id and not m.preferred_schedule:
-        q = q.where(ClassSession.space_id == m.preferred_space_id)
+    # Filtrar por espacio cuando sea posible para no traer sesiones de otros espacios innecesariamente.
+    # hybrid_fixed: cada entry tiene su propio space_id, no filtramos aquí.
+    # Cualquier otro tipo: si preferred_schedule no tiene space_id por entry (formato legacy {"day","hour"}),
+    # o si usa preferred_days, filtrar por preferred_space_id global.
+    if m.membership_type not in ("hybrid_fixed",) and m.preferred_space_id:
+        uses_per_entry_space = m.preferred_schedule and any(e.get("space_id") for e in m.preferred_schedule)
+        if not uses_per_entry_space:
+            q = q.where(ClassSession.space_id == m.preferred_space_id)
 
     result = await db.execute(q)
     sessions = result.scalars().all()
@@ -773,7 +782,15 @@ async def auto_book_membership(
     skipped = 0
     booked_dates = []
 
-    for session in matching:
+    # Cupo restante: para planes con sesiones fijas, no superar total_sessions
+    remaining_quota = None
+    if m.membership_type in ("session_based", "hybrid_fixed") and m.total_sessions is not None:
+        remaining_quota = m.total_sessions - (m.sessions_used or 0)
+
+    for session in sorted(matching, key=lambda s: s.start_datetime):
+        if remaining_quota is not None and booked >= remaining_quota:
+            skipped += 1
+            continue
         if session.id in existing_session_ids:
             skipped += 1
             continue

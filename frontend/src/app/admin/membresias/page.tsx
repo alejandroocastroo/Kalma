@@ -586,28 +586,45 @@ export default function MembresiasPage() {
       membership_type: plan.membership_type as any,
       sessions_per_week: plan.sessions_per_week ? String(plan.sessions_per_week) as '2' | '3' | '5' : '',
       space_quotas_with_days: hybridQuotas,
+      // Pre-seleccionar el espacio del plan para evitar que el admin lo asigne al espacio equivocado
+      preferred_space_id: plan.space_id || f.preferred_space_id,
     }))
   }
 
   const isHybrid = form.membership_type === 'hybrid_fixed' || form.membership_type === 'hybrid_monthly'
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.client_id || !form.plan_id || !form.start_date) {
       toast.error('Completa los campos requeridos')
       return
     }
     if (form.membership_type === 'session_based') {
       if (!form.sessions_per_week) { toast.error('Selecciona las sesiones por semana'); return }
-      if (form.scheduled_days.length === 0) { toast.error('Selecciona al menos un día de asistencia'); return }
+      const spw = Number(form.sessions_per_week)
+      if (form.scheduled_days.length !== spw) {
+        toast.error(`El plan requiere exactamente ${spw} día(s) por semana. Tienes ${form.scheduled_days.length} seleccionado(s).`)
+        return
+      }
+      const missingHours = form.preferred_schedule.filter(e => e.hour === '').length
+      if (missingHours > 0) {
+        toast.error(`Debes asignar la hora a todos los días seleccionados. Faltan ${missingHours} hora(s).`)
+        return
+      }
     }
     if (form.membership_type === 'weekly_sessions') {
       if (!form.sessions_per_week) { toast.error('Selecciona las sesiones por semana'); return }
     }
     if (isHybrid && form.membership_type === 'hybrid_fixed') {
       for (const q of form.space_quotas_with_days) {
+        const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || q.space_id
         if (q.scheduled_days.length !== q.sessions_per_week) {
-          const spaceName = spacesList.find((s: any) => s.id === q.space_id)?.name || q.space_id
           toast.error(`Selecciona exactamente ${q.sessions_per_week} día(s) para ${spaceName}`)
+          return
+        }
+        const spaceEntries = form.preferred_schedule.filter(e => e.space_id === q.space_id)
+        const missingHours = spaceEntries.filter(e => e.hour === '').length
+        if (missingHours > 0) {
+          toast.error(`Asigna la hora a todos los días de ${spaceName}. Faltan ${missingHours} hora(s).`)
           return
         }
       }
@@ -615,6 +632,39 @@ export default function MembresiasPage() {
     const validSchedule = (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed')
       ? form.preferred_schedule.filter(e => e.hour !== '')
       : []
+
+    // Verificar que existan sesiones creadas para el horario configurado (solo al crear, no al editar)
+    if (!editing && (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed') && validSchedule.length > 0) {
+      try {
+        const check = await classSessions.checkSchedule({
+          start_date: form.start_date,
+          schedule: validSchedule.map(e => ({
+            day: e.day,
+            hour: e.hour as number,
+            ...(e.space_id ? { space_id: e.space_id } : {}),
+          })),
+          weeks_ahead: 12,
+        })
+        if (check.sessions_found === 0) {
+          toast.error(
+            'No hay sesiones creadas para los días y horas seleccionados. Crea las sesiones en el módulo de Horarios antes de ingresar esta membresía.',
+            { duration: 6000 }
+          )
+          return
+        }
+        const selectedPlan = plansList.find(p => p.id === form.plan_id)
+        const expectedTotal = selectedPlan?.total_sessions ?? null
+        if (expectedTotal && check.sessions_found < expectedTotal) {
+          toast.warning(
+            `Solo hay ${check.sessions_found} sesiones creadas de las ${expectedTotal} que requiere este plan hasta su vencimiento. El cliente quedará sin clases disponibles cuando se agoten. Crea las sesiones faltantes en el módulo de Horarios.`,
+            { duration: 8000 }
+          )
+          // No bloqueamos — el admin puede continuar y crear las sesiones después
+        }
+      } catch {
+        // Si el check falla por red u otro motivo, no bloqueamos la creación
+      }
+    }
 
     if (editing) {
       const payload = {
@@ -1058,9 +1108,14 @@ export default function MembresiasPage() {
                       )
                     })}
                   </div>
-                  {form.sessions_per_week && form.scheduled_days.length > 0 && (
-                    <p className="text-xs text-gray-400 mt-1">
-                      La fecha de vencimiento se calculará contando {Number(form.sessions_per_week) * 4} ocurrencias desde el inicio.
+                  {form.sessions_per_week && (
+                    <p className={`text-xs mt-1 font-medium ${
+                      form.scheduled_days.length === Number(form.sessions_per_week)
+                        ? 'text-green-600'
+                        : 'text-amber-600'
+                    }`}>
+                      {form.scheduled_days.length}/{Number(form.sessions_per_week)} días seleccionados
+                      {form.scheduled_days.length === Number(form.sessions_per_week) && ' ✓'}
                     </p>
                   )}
                 </div>

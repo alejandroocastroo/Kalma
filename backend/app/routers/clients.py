@@ -190,15 +190,20 @@ async def client_appointments(
     from app.models.appointment import Appointment
     from app.models.class_session import ClassSession
     from app.models.class_type import ClassType
+    from app.models.space import Space
+    from datetime import timezone, timedelta
+
+    BOGOTA_TZ = timezone(timedelta(hours=-5))
 
     result = await db.execute(
         select(Appointment)
+        .join(ClassSession, Appointment.class_session_id == ClassSession.id)
         .where(
             Appointment.client_id == uuid.UUID(client_id),
             Appointment.tenant_id == current_user.tenant_id,
         )
-        .order_by(Appointment.created_at.desc())
-        .limit(20)
+        .order_by(ClassSession.start_datetime.desc())
+        .limit(50)
     )
     appointments = result.scalars().all()
     client_obj = await db.get(Client, uuid.UUID(client_id))
@@ -208,16 +213,29 @@ async def client_appointments(
     for appt in appointments:
         session = await db.get(ClassSession, appt.class_session_id)
         ct_name = None
+        space_name = None
+        session_start_local = None
         if session:
-            ct = await db.get(ClassType, session.class_type_id)
-            ct_name = ct.name if ct else None
+            if session.class_type_id:
+                ct = await db.get(ClassType, session.class_type_id)
+                ct_name = ct.name if ct else None
+            if session.space_id:
+                space = await db.get(Space, session.space_id)
+                space_name = space.name if space else None
+                if not ct_name:
+                    ct_name = space_name
+            # Convertir UTC → Bogotá para mostrar hora local
+            if session.start_datetime:
+                local_dt = session.start_datetime.astimezone(BOGOTA_TZ)
+                session_start_local = local_dt.strftime("%Y-%m-%dT%H:%M:%S")
         enriched.append({
             "id": str(appt.id),
             "status": appt.status,
             "paid": appt.paid,
             "payment_amount": float(appt.payment_amount) if appt.payment_amount else None,
-            "session_start": session.start_datetime.isoformat() if session else None,
+            "session_start": session_start_local,
             "class_type_name": ct_name,
+            "space_name": space_name,
             "client_name": client_name,
             "client_phone": client_phone,
             "created_at": appt.created_at.isoformat(),

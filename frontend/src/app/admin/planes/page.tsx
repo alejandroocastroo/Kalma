@@ -142,7 +142,7 @@ export default function PlanesPage() {
     saveMutation.mutate({
       name: form.name.trim(),
       description: form.description || undefined,
-      price_cop: Number(form.price_cop),
+      price_cop: parseInt(form.price_cop.replace(/\D/g, ''), 10) || 0,
       classes_per_week: spw ?? Number(form.classes_per_week),
       is_active: form.is_active,
       membership_type: form.membership_type,

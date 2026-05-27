@@ -111,6 +111,8 @@ export const classSessions = {
     apiClient.post<{ message: string; appointments_cancelled: number; makeup_credits_added: number }>(
       `/class-sessions/${id}/cancel-holiday`, data
     ).then((r) => r.data),
+  checkSchedule: (data: { start_date: string; schedule: { day: number; hour: number; space_id?: string }[]; weeks_ahead?: number }) =>
+    apiClient.post<{ sessions_found: number; matching_dates: string[] }>('/class-sessions/check-schedule', data).then((r) => r.data),
 }
 
 // ── Clients ───────────────────────────────────────────────────
