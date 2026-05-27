@@ -96,7 +96,7 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
 
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
-    queryFn: () => clients.list({ limit: 100, is_active: true }),
+    queryFn: () => clients.list({ limit: 500, is_active: true }),
   })
   const allClients = clientsData?.items ?? []
 
@@ -874,7 +874,7 @@ export default function AgendaPage() {
 
   const { data: clientsData } = useQuery({
     queryKey: ['clients-all'],
-    queryFn: () => clients.list({ limit: 100, is_active: true }),
+    queryFn: () => clients.list({ limit: 500, is_active: true }),
   })
   const allClients = clientsData?.items ?? []
 
