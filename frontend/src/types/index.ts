@@ -80,7 +80,7 @@ export interface Client {
   birth_date?: string
   emergency_contact_name?: string
   emergency_contact_phone?: string
-  notes?: string
+  notes?: string | null
   total_sessions: number
   is_active: boolean
   created_at: string

@@ -338,7 +338,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
   const buildPayload = () => ({
     ...form,
     birth_date: form.birth_date || undefined,
-    notes: form.notes || undefined,
+    notes: form.notes || null,
   })
 
   const doCreate = async () => {

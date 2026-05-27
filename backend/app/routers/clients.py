@@ -170,7 +170,7 @@ async def update_client(
     client = result.scalar_one_or_none()
     if not client:
         raise HTTPException(404, "Cliente no encontrado")
-    for field, value in body.model_dump(exclude_none=True).items():
+    for field, value in body.model_dump(exclude_unset=True).items():
         setattr(client, field, value)
     try:
         await db.commit()
