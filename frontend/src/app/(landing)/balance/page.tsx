@@ -1,18 +1,17 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Playfair_Display } from 'next/font/google'
+import '@fontsource/playfair-display/400.css'
+import '@fontsource/playfair-display/400-italic.css'
+import '@fontsource/playfair-display/500.css'
+import '@fontsource/playfair-display/500-italic.css'
 import { Users, Phone, Instagram, MessageCircle } from 'lucide-react'
 import { BookingWidget } from '@/components/landing/booking-widget'
 import { ClassesCarousel } from '@/components/landing/classes-carousel'
 import { formatCOP } from '@/lib/utils'
 import type { PublicSession } from '@/types'
 
-const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  style: ['normal', 'italic'],
-})
+const playfair = { className: 'font-playfair' }
 
 // ─── API ────────────────────────────────────────────────────────────────────
 

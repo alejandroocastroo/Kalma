@@ -10,8 +10,17 @@
     box-sizing: border-box;
   }
   body {
+    font-family: 'Inter', sans-serif;
     @apply text-gray-900;
   }
+}
+
+.font-cormorant {
+  font-family: 'Cormorant Garamond', serif;
+}
+
+.font-playfair {
+  font-family: 'Playfair Display', serif;
 }
 
 @layer utilities {

@@ -1,18 +1,17 @@
 import type { Metadata } from 'next'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Cormorant_Garamond } from 'next/font/google'
+import '@fontsource/cormorant-garamond/300.css'
+import '@fontsource/cormorant-garamond/300-italic.css'
+import '@fontsource/cormorant-garamond/400.css'
+import '@fontsource/cormorant-garamond/400-italic.css'
 import { Users, MapPin, Phone, Instagram, MessageCircle, Facebook } from 'lucide-react'
 import { BookingWidget } from '@/components/landing/booking-widget'
 import { ClassesCarousel } from '@/components/landing/classes-carousel'
 import { formatCOP } from '@/lib/utils'
 import type { PublicSession } from '@/types'
 
-const cormorant = Cormorant_Garamond({
-  subsets: ['latin'],
-  weight: ['300', '400'],
-  style: ['normal', 'italic'],
-})
+const cormorant = { className: 'font-cormorant' }
 
 // ─── API (solo horario de reservas) ─────────────────────────────────────────
 
