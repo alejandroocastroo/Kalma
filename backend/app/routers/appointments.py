@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import Optional
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 from pydantic import BaseModel
 
 from app.database import get_db
@@ -70,9 +70,24 @@ async def create_appointment(
     if session.enrolled_count >= session.capacity:
         raise HTTPException(400, "La sesión está llena")
 
-    appt = Appointment(tenant_id=current_user.tenant_id, **body.model_dump())
+    appt_data = body.model_dump()
+
+    # Si la sesión ya pasó, insertar directamente como attended y contar la visita
+    session_is_past = session.start_datetime < datetime.now(timezone.utc)
+    if session_is_past:
+        appt_data["status"] = "attended"
+
+    appt = Appointment(tenant_id=current_user.tenant_id, **appt_data)
     db.add(appt)
     session.enrolled_count += 1
+
+    if session_is_past:
+        client = await db.get(Client, appt.client_id)
+        if client:
+            client.total_sessions += 1
+        await db.flush()  # appt necesita tener id antes de apply_attendance
+        await apply_attendance(db, appt, space_id=session.space_id)
+
     await db.commit()
     await db.refresh(appt)
     return await _enrich(appt, db)

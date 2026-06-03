@@ -1,7 +1,7 @@
 import uuid
 from sqlalchemy import String, Text, Boolean
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.database import Base
 from app.models.base import TimestampMixin
 
@@ -24,6 +24,8 @@ class Tenant(Base, TimestampMixin):
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     plan: Mapped[str] = mapped_column(String(20), default="basic")
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="COP")
+    custom_categories: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # {"income": ["Yoga especial", "Taller"], "expense": ["Cafetería"]}
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     users = relationship("User", back_populates="tenant", lazy="noload")

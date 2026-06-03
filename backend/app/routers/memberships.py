@@ -364,6 +364,58 @@ async def create_membership_v2(
     db.add(m)
     await db.commit()
     await db.refresh(m)
+
+    # Conteo retroactivo: si start_date está en el pasado, buscar asistencias
+    # del cliente en ese rango y ajustar sessions_used / space_usage.
+    if body.membership_type != "monthly" and body.start_date < date.today():
+        now_utc = datetime.now(timezone.utc)
+        start_dt = datetime(body.start_date.year, body.start_date.month, body.start_date.day, tzinfo=timezone.utc)
+
+        attended_q = (
+            select(Appointment, ClassSession)
+            .join(ClassSession, Appointment.class_session_id == ClassSession.id)
+            .where(
+                Appointment.client_id == m.client_id,
+                Appointment.tenant_id == current_user.tenant_id,
+                Appointment.status == "attended",
+                ClassSession.start_datetime >= start_dt,
+                ClassSession.start_datetime <= now_utc,
+            )
+        )
+
+        # Para híbridos: solo contar clases en espacios cubiertos por la membresía
+        if m.membership_type in {"hybrid_fixed", "hybrid_monthly"} and m.space_quotas:
+            covered_space_ids = [
+                uuid.UUID(q["space_id"]) for q in m.space_quotas if q.get("space_id")
+            ]
+            attended_q = attended_q.where(ClassSession.space_id.in_(covered_space_ids))
+
+        rows = (await db.execute(attended_q)).all()
+
+        total_counted = len(rows)
+        # No superar total_sessions si hay límite
+        if m.total_sessions is not None:
+            total_counted = min(total_counted, m.total_sessions)
+
+        m.sessions_used = total_counted
+
+        # Para híbridos: también actualizar space_usage por espacio
+        if m.membership_type in {"hybrid_fixed", "hybrid_monthly"} and m.space_quotas:
+            usage = {str(q["space_id"]): 0 for q in m.space_quotas if q.get("space_id")}
+            counted_so_far = 0
+            for _, session in rows:
+                if counted_so_far >= total_counted:
+                    break
+                key = str(session.space_id) if session.space_id else None
+                if key and key in usage:
+                    usage[key] += 1
+                    counted_so_far += 1
+            m.space_usage = usage
+
+        if total_counted > 0:
+            await db.commit()
+            await db.refresh(m)
+
     return await _enrich(m, db)
 
 
@@ -450,11 +502,47 @@ async def update_membership(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
+    from app.models.plan import Plan
+    from app.utils.membership_calc import calculate_expiry_date, calculate_expiry_date_hybrid
+
     m = await db.get(ClientMembership, uuid.UUID(membership_id))
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
-    for field, value in body.model_dump(exclude_none=True).items():
+
+    update_data = body.model_dump(exclude_none=True)
+
+    # Si se cambia el plan, re-derivar total_sessions y expiry_date automáticamente
+    if "plan_id" in update_data:
+        plan = await db.get(Plan, uuid.UUID(str(update_data["plan_id"])))
+        if not plan or plan.tenant_id != current_user.tenant_id:
+            raise HTTPException(404, "Plan no encontrado")
+
+        update_data["total_sessions"] = plan.total_sessions
+        # Sincronizar sessions_per_week solo si el payload no lo envía explícitamente
+        if "sessions_per_week" not in update_data and plan.classes_per_week:
+            update_data["sessions_per_week"] = plan.classes_per_week
+
+        # start_date: usar el del body si se está cambiando, si no el original
+        effective_start = update_data.get("start_date", m.start_date)
+        if isinstance(effective_start, str):
+            from datetime import date as date_type
+            effective_start = date_type.fromisoformat(effective_start)
+
+        # scheduled_days: los del body si se actualizan, si no los actuales
+        effective_days = update_data.get("scheduled_days") or m.scheduled_days or []
+
+        if m.membership_type == "session_based" and effective_days and plan.total_sessions:
+            update_data["expiry_date"] = calculate_expiry_date(
+                effective_start, effective_days, plan.total_sessions
+            )
+        elif m.membership_type == "hybrid_fixed" and m.space_quotas:
+            update_data["expiry_date"] = calculate_expiry_date_hybrid(
+                effective_start, m.space_quotas
+            )
+
+    for field, value in update_data.items():
         setattr(m, field, value)
+
     await db.commit()
     await db.refresh(m)
     return await _enrich(m, db)

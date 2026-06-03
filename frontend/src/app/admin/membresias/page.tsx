@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Plus, RotateCcw, Pencil, RefreshCw, Calendar, ChevronRight, CheckCircle2, ArrowRight, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
-import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi, classSessions } from '@/lib/api'
+import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi, classSessions, payments as paymentsApi } from '@/lib/api'
 import type { ClientMembership, Plan, Client, WeeklyStats, AutoBookResult, ClassSession } from '@/types'
 import { formatCurrency } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
@@ -318,6 +318,9 @@ export default function MembresiasPage() {
   const [bonusNotes, setBonusNotes] = useState('')
   const [renewTarget, setRenewTarget] = useState<ClientMembership | null>(null)
   const [renewDate, setRenewDate] = useState('')
+  const [renewAmount, setRenewAmount] = useState('')
+  const [renewPaymentMethod, setRenewPaymentMethod] = useState('cash')
+  const [sessionWarning, setSessionWarning] = useState<{ message: string; onConfirm: () => void } | null>(null)
   const [form, setForm] = useState({
     client_id: '',
     plan_id: '',
@@ -633,52 +636,24 @@ export default function MembresiasPage() {
       ? form.preferred_schedule.filter(e => e.hour !== '')
       : []
 
-    // Verificar que existan sesiones creadas para el horario configurado (solo al crear, no al editar)
-    if (!editing && (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed') && validSchedule.length > 0) {
-      try {
-        const check = await classSessions.checkSchedule({
-          start_date: form.start_date,
-          schedule: validSchedule.map(e => ({
-            day: e.day,
-            hour: e.hour as number,
-            ...(e.space_id ? { space_id: e.space_id } : {}),
-          })),
-          weeks_ahead: 12,
-        })
-        if (check.sessions_found === 0) {
-          toast.error(
-            'No hay sesiones creadas para los días y horas seleccionados. Crea las sesiones en el módulo de Horarios antes de ingresar esta membresía.',
-            { duration: 6000 }
-          )
-          return
-        }
-        const selectedPlan = plansList.find(p => p.id === form.plan_id)
-        const expectedTotal = selectedPlan?.total_sessions ?? null
-        if (expectedTotal && check.sessions_found < expectedTotal) {
-          toast.warning(
-            `Solo hay ${check.sessions_found} sesiones creadas de las ${expectedTotal} que requiere este plan hasta su vencimiento. El cliente quedará sin clases disponibles cuando se agoten. Crea las sesiones faltantes en el módulo de Horarios.`,
-            { duration: 8000 }
-          )
-          // No bloqueamos — el admin puede continuar y crear las sesiones después
-        }
-      } catch {
-        // Si el check falla por red u otro motivo, no bloqueamos la creación
-      }
-    }
-
+    // Construir el payload y la función de guardado antes del check,
+    // para poder capturarla en el closure del diálogo de confirmación.
+    let proceed: () => void
     if (editing) {
       const payload = {
         plan_id: form.plan_id,
         start_date: form.start_date,
         end_date: form.end_date || undefined,
         notes: form.notes || undefined,
+        sessions_per_week: (!isHybrid && form.sessions_per_week) ? Number(form.sessions_per_week) : undefined,
+        scheduled_days: (form.membership_type === 'session_based' && form.scheduled_days.length > 0) ? form.scheduled_days : undefined,
         preferred_days: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_days.length > 0) ? form.preferred_days : undefined,
         preferred_hour: (!isHybrid && form.membership_type !== 'session_based' && form.preferred_hour !== '') ? Number(form.preferred_hour) : undefined,
         preferred_space_id: (!isHybrid && form.preferred_space_id) || undefined,
         preferred_schedule: validSchedule.length > 0 ? validSchedule as { day: number; hour: number }[] : undefined,
         status: editing.status,
       }
-      updateMutation.mutate({ id: editing.id, data: payload })
+      proceed = () => updateMutation.mutate({ id: editing.id, data: payload })
     } else {
       const payload: Parameters<typeof memberships.createV2>[0] = {
         client_id: form.client_id,
@@ -699,8 +674,44 @@ export default function MembresiasPage() {
         preferred_space_id: (!isHybrid && form.preferred_space_id) || undefined,
         preferred_schedule: validSchedule.length > 0 ? validSchedule as { day: number; hour: number }[] : undefined,
       }
-      createV2Mutation.mutate(payload)
+      proceed = () => createV2Mutation.mutate(payload)
     }
+
+    // Verificar sesiones disponibles solo al crear planes con días seleccionados
+    if (!editing && (form.membership_type === 'session_based' || form.membership_type === 'hybrid_fixed') && validSchedule.length > 0) {
+      try {
+        const check = await classSessions.checkSchedule({
+          start_date: form.start_date,
+          schedule: validSchedule.map(e => ({
+            day: e.day,
+            hour: e.hour as number,
+            ...(e.space_id ? { space_id: e.space_id } : {}),
+          })),
+          weeks_ahead: 12,
+        })
+        const selectedPlan = plansList.find(p => p.id === form.plan_id)
+        const expectedTotal = selectedPlan?.total_sessions ?? null
+
+        if (check.sessions_found === 0) {
+          setSessionWarning({
+            message: 'No hay sesiones creadas para los días y horas seleccionados. Si continúas, la membresía se creará pero el cliente no quedará agendado en ninguna clase.',
+            onConfirm: proceed,
+          })
+          return
+        }
+        if (expectedTotal && check.sessions_found < expectedTotal) {
+          setSessionWarning({
+            message: `Solo hay ${check.sessions_found} sesiones creadas de las ${expectedTotal} que requiere este plan. Si continúas, el cliente quedará sin clases disponibles cuando se agoten esas ${check.sessions_found} sesiones.`,
+            onConfirm: proceed,
+          })
+          return
+        }
+      } catch {
+        // Si el check falla por red, procedemos sin bloquear
+      }
+    }
+
+    proceed()
   }
 
   const isSaving = createMutation.isPending || createV2Mutation.isPending || updateMutation.isPending || autoBookMutation.isPending
@@ -968,6 +979,10 @@ export default function MembresiasPage() {
                     onClick={() => {
                       setRenewTarget(m)
                       setRenewDate(format(new Date(), 'yyyy-MM-dd'))
+                      const plan = plansList.find(p => p.id === m.plan_id)
+                      const price = plan?.price_cop ?? 0
+                      setRenewAmount(price > 0 ? new Intl.NumberFormat('es-CO').format(price) : '')
+                      setRenewPaymentMethod('cash')
                     }}
                     className="gap-1 text-xs px-2 py-1 h-auto text-blue-700 border-blue-200 hover:bg-blue-50"
                   >
@@ -1345,7 +1360,7 @@ export default function MembresiasPage() {
       </Dialog>
 
       {/* Dialog: Renovar membresía */}
-      <Dialog open={!!renewTarget} onOpenChange={open => { if (!open) { setRenewTarget(null); setRenewDate('') } }}>
+      <Dialog open={!!renewTarget} onOpenChange={open => { if (!open) { setRenewTarget(null); setRenewDate(''); setRenewAmount(''); setRenewPaymentMethod('cash') } }}>
         <DialogContent title="Renovar membresía">
           <div className="space-y-4 py-2">
             <div className="space-y-1">
@@ -1368,13 +1383,66 @@ export default function MembresiasPage() {
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Valor cobrado ({getTenantCurrency()})</label>
+              <Input
+                type="text"
+                inputMode="numeric"
+                placeholder="Ej: 150.000"
+                value={renewAmount}
+                onChange={e => {
+                  const digits = e.target.value.replace(/\D/g, '')
+                  setRenewAmount(digits ? new Intl.NumberFormat('es-CO').format(parseInt(digits, 10)) : '')
+                }}
+                className="w-full"
+              />
+              <p className="text-xs text-gray-400">Puedes ajustar si hay descuento. Déjalo vacío para no registrar pago.</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm font-medium text-gray-700">Método de pago</label>
+              <select
+                value={renewPaymentMethod}
+                onChange={e => setRenewPaymentMethod(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="cash">Efectivo</option>
+                <option value="transfer">Transferencia</option>
+                <option value="card">Tarjeta</option>
+                <option value="nequi">Nequi</option>
+                <option value="daviplata">Daviplata</option>
+                <option value="other">Otro</option>
+              </select>
+            </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setRenewTarget(null)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setRenewTarget(null); setRenewDate(''); setRenewAmount(''); setRenewPaymentMethod('cash') }}>Cancelar</Button>
             <Button
-              onClick={() => {
+              onClick={async () => {
                 if (!renewTarget || !renewDate) return
-                renewMutation.mutate({ id: renewTarget.id, start_date: renewDate })
+                try {
+                  await renewMutation.mutateAsync({ id: renewTarget.id, start_date: renewDate })
+                } catch {
+                  return // el error ya lo maneja onError del mutation
+                }
+                const rawAmount = parseInt(renewAmount.replace(/\D/g, ''), 10)
+                if (rawAmount > 0) {
+                  const plan = plansList.find(p => p.id === renewTarget.plan_id)
+                  const isHybrid = renewTarget.membership_type === 'hybrid_fixed' || renewTarget.membership_type === 'hybrid_monthly'
+                  try {
+                    await paymentsApi.create({
+                      type: 'income',
+                      amount: rawAmount as any,
+                      category: isHybrid ? 'membresia_hibrida' : 'membresia',
+                      payment_method: renewPaymentMethod,
+                      space_id: plan?.space_id || undefined,
+                      client_id: renewTarget.client_id,
+                      description: `Renovación membresía — ${renewTarget.client_name}`,
+                      payment_date: renewDate,
+                    })
+                  } catch {
+                    toast.error('La membresía se renovó pero no se pudo registrar el pago en caja')
+                  }
+                }
               }}
               disabled={renewMutation.isPending || !renewDate}
               className="bg-primary-600 hover:bg-primary-700 text-white"
@@ -1465,6 +1533,41 @@ export default function MembresiasPage() {
             isPending={createMakeupMutation.isPending}
             onClose={() => { setMakeupTarget(null); setMakeupStep(1); setMakeupOriginalDate(''); setMakeupSelectedSession(null) }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Diálogo de confirmación: sesiones insuficientes */}
+      <Dialog open={!!sessionWarning} onOpenChange={open => { if (!open) setSessionWarning(null) }}>
+        <DialogContent title="Sesiones insuficientes">
+          <div className="space-y-4 py-2">
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3">
+              <p className="text-sm text-amber-800 leading-relaxed">{sessionWarning?.message}</p>
+            </div>
+            <p className="text-sm text-gray-600">¿Deseas continuar de todas formas o ir al módulo de Horarios a crear las sesiones primero?</p>
+            <div className="flex gap-2 justify-end pt-1">
+              <Button variant="outline" onClick={() => setSessionWarning(null)}>
+                Cancelar
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setSessionWarning(null)
+                  window.open('/admin/horarios', '_self')
+                }}
+              >
+                Ir a Horarios
+              </Button>
+              <Button
+                className="bg-primary-600 hover:bg-primary-700 text-white"
+                onClick={() => {
+                  sessionWarning?.onConfirm()
+                  setSessionWarning(null)
+                }}
+              >
+                Continuar de todas formas
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

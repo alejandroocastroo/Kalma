@@ -130,6 +130,39 @@ async def check_schedule_availability(
     }
 
 
+@router.get("/coverage")
+async def sessions_coverage(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Retorna la última fecha de sesión activa por espacio (para info al admin)."""
+    now = datetime.now(timezone.utc)
+    rows = (await db.execute(
+        select(ClassSession.space_id, func.max(ClassSession.start_datetime).label("last_date"))
+        .where(
+            ClassSession.tenant_id == current_user.tenant_id,
+            ClassSession.status != "cancelled",
+            ClassSession.start_datetime >= now,
+        )
+        .group_by(ClassSession.space_id)
+    )).all()
+
+    result = []
+    BOGOTA_TZ = timezone(timedelta(hours=-5))
+    for row in rows:
+        space_name = None
+        if row.space_id:
+            space = await db.get(Space, row.space_id)
+            space_name = space.name if space else None
+        last_local = row.last_date.astimezone(BOGOTA_TZ).strftime("%d %b %Y") if row.last_date else None
+        result.append({
+            "space_id": str(row.space_id) if row.space_id else None,
+            "space_name": space_name or "General",
+            "last_date": last_local,
+        })
+    return result
+
+
 @router.get("", response_model=List[ClassSessionResponse])
 async def list_sessions(
     start: Optional[str] = None,

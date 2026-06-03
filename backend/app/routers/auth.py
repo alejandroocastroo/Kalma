@@ -174,3 +174,76 @@ async def update_tenant_settings(
     tenant.currency = currency
     await db.commit()
     return {"currency": tenant.currency, "message": "Moneda actualizada"}
+
+
+@router.get("/custom-categories")
+async def get_custom_categories(
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Retorna las categorías personalizadas del tenant."""
+    from app.models.tenant import Tenant
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    cats = (tenant.custom_categories or {}) if tenant else {}
+    return {
+        "income": cats.get("income", []),
+        "expense": cats.get("expense", []),
+    }
+
+
+class CustomCategoriesUpdate(PydanticBaseModel):
+    type: str   # "income" | "expense"
+    label: str
+
+
+class CustomCategoriesDelete(PydanticBaseModel):
+    type: str
+    label: str
+
+
+@router.post("/custom-categories")
+async def add_custom_category(
+    body: CustomCategoriesUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    from app.models.tenant import Tenant
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    if body.type not in ("income", "expense"):
+        raise HTTPException(400, "type debe ser 'income' o 'expense'")
+    label = body.label.strip()
+    if not label or len(label) > 60:
+        raise HTTPException(400, "El nombre debe tener entre 1 y 60 caracteres")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    cats = dict(tenant.custom_categories or {})
+    existing = cats.get(body.type, [])
+    if label in existing:
+        raise HTTPException(409, "Ya existe una categoría con ese nombre")
+    cats[body.type] = existing + [label]
+    tenant.custom_categories = cats
+    await db.commit()
+    return {"income": cats.get("income", []), "expense": cats.get("expense", [])}
+
+
+@router.delete("/custom-categories")
+async def delete_custom_category(
+    body: CustomCategoriesDelete,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    from app.models.tenant import Tenant
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    cats = dict(tenant.custom_categories or {})
+    cats[body.type] = [c for c in cats.get(body.type, []) if c != body.label]
+    tenant.custom_categories = cats
+    await db.commit()
+    return {"income": cats.get("income", []), "expense": cats.get("expense", [])}

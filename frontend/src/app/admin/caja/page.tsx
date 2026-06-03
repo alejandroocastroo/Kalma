@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { payments, spaces as spacesApi, clients as clientsApi, instructors as instructorsApi } from '@/lib/api'
+import { payments, spaces as spacesApi, clients as clientsApi, instructors as instructorsApi, auth as authApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
@@ -11,10 +11,30 @@ import { StatsCard } from '@/components/admin/stats-card'
 import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
-import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet } from 'lucide-react'
+import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet, Settings2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from 'recharts'
 import type { Space, Instructor, Client, PaginatedResponse } from '@/types'
+
+const PERIOD_DAY_KEY = 'caja_period_start_day'
+
+function getPeriodDates(startDay: number): { start: string; end: string } {
+  const today = new Date()
+  const d = today.getDate()
+  let periodStart: Date
+  let periodEnd: Date
+  if (d >= startDay) {
+    periodStart = new Date(today.getFullYear(), today.getMonth(), startDay)
+    periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, startDay - 1)
+  } else {
+    periodStart = new Date(today.getFullYear(), today.getMonth() - 1, startDay)
+    periodEnd = new Date(today.getFullYear(), today.getMonth(), startDay - 1)
+  }
+  return {
+    start: format(periodStart, 'yyyy-MM-dd'),
+    end: format(periodEnd, 'yyyy-MM-dd'),
+  }
+}
 
 const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#f97316']
 const SPACE_COLORS: Record<string, string> = {
@@ -50,14 +70,39 @@ const EXPENSE_CATEGORIES = [
 
 export default function CajaPage() {
   const currency = getTenantCurrency()
-  const today = new Date()
-  const [startDate, setStartDate] = useState(format(startOfMonth(today), 'yyyy-MM-dd'))
-  const [endDate, setEndDate] = useState(format(endOfMonth(today), 'yyyy-MM-dd'))
+  const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [endDate, setEndDate] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [periodStartDay, setPeriodStartDay] = useState(1)
+
+  useEffect(() => {
+    const day = Number(localStorage.getItem(PERIOD_DAY_KEY))
+    if (day >= 1 && day <= 28) {
+      const { start, end } = getPeriodDates(day)
+      setStartDate(start)
+      setEndDate(end)
+      setPeriodStartDay(day)
+    }
+  }, [])
+  const [showPeriodConfig, setShowPeriodConfig] = useState(false)
+  const [periodDayInput, setPeriodDayInput] = useState(String(periodStartDay))
   const [showIncome, setShowIncome] = useState(false)
   const [showExpense, setShowExpense] = useState(false)
   const [activeSpace, setActiveSpace] = useState<string | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [showCatManager, setShowCatManager] = useState(false)
+  const [newCatLabel, setNewCatLabel] = useState('')
+  const [newCatType, setNewCatType] = useState<'income' | 'expense'>('income')
   const qc = useQueryClient()
+
+  function applyPeriodDay(day: number) {
+    const clamped = Math.min(28, Math.max(1, day))
+    const { start, end } = getPeriodDates(clamped)
+    setStartDate(start)
+    setEndDate(end)
+    setPeriodStartDay(clamped)
+    localStorage.setItem(PERIOD_DAY_KEY, String(clamped))
+    setShowPeriodConfig(false)
+  }
 
   const params = { start: startDate, end: endDate }
 
@@ -74,6 +119,25 @@ export default function CajaPage() {
   const { data: spacesList = [] } = useQuery({
     queryKey: ['spaces'],
     queryFn: () => spacesApi.list(),
+  })
+
+  const { data: customCats = { income: [], expense: [] }, refetch: refetchCats } = useQuery({
+    queryKey: ['custom-categories'],
+    queryFn: () => authApi.getCustomCategories(),
+    staleTime: 10 * 60 * 1000,
+  })
+
+  const addCatMutation = useMutation({
+    mutationFn: ({ type, label }: { type: 'income' | 'expense'; label: string }) =>
+      authApi.addCustomCategory(type, label),
+    onSuccess: () => { refetchCats(); setNewCatLabel('') },
+    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al agregar categoría'),
+  })
+
+  const deleteCatMutation = useMutation({
+    mutationFn: ({ type, label }: { type: 'income' | 'expense'; label: string }) =>
+      authApi.deleteCustomCategory(type, label),
+    onSuccess: () => refetchCats(),
   })
 
   const deleteMutation = useMutation({
@@ -128,7 +192,57 @@ export default function CajaPage() {
           <label className="text-sm text-gray-600">Hasta</label>
           <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-40" />
         </div>
+        {/* Configurar período */}
+        <div className="relative">
+          <Button
+            variant="outline"
+            onClick={() => { setPeriodDayInput(String(periodStartDay)); setShowPeriodConfig(v => !v) }}
+            className="text-gray-600 border-dashed"
+          >
+            <Settings2 className="w-4 h-4 mr-1" />
+            Período {periodStartDay !== 1 && <span className="ml-1 text-xs text-primary-600 font-semibold">día {periodStartDay}</span>}
+          </Button>
+          {showPeriodConfig && (
+            <div className="absolute left-0 top-full mt-2 z-50 bg-white border border-gray-200 rounded-2xl shadow-lg p-4 w-64">
+              <p className="text-sm font-semibold text-gray-800 mb-1">Inicio del período</p>
+              <p className="text-xs text-gray-500 mb-3">Define el día del mes en que empieza tu período de caja (ej: 16).</p>
+              <div className="flex items-center gap-2 mb-3">
+                <label className="text-sm text-gray-600 whitespace-nowrap">Día de inicio</label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={28}
+                  value={periodDayInput}
+                  onChange={e => setPeriodDayInput(e.target.value)}
+                  className="w-20 text-center"
+                />
+              </div>
+              {(() => {
+                const day = Number(periodDayInput)
+                if (day >= 1 && day <= 28) {
+                  const { start, end } = getPeriodDates(day)
+                  const fmt = (d: string) => new Date(d + 'T00:00:00').toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })
+                  return <p className="text-xs text-gray-400 mb-3">Período actual: <span className="font-medium text-gray-600">{fmt(start)} — {fmt(end)}</span></p>
+                }
+                return null
+              })()}
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1 text-sm" onClick={() => setShowPeriodConfig(false)}>Cancelar</Button>
+                <Button
+                  className="flex-1 text-sm bg-primary-600 hover:bg-primary-700 text-white"
+                  onClick={() => applyPeriodDay(Number(periodDayInput))}
+                  disabled={Number(periodDayInput) < 1 || Number(periodDayInput) > 28}
+                >
+                  Aplicar
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
         <div className="ml-auto flex gap-2">
+          <Button variant="outline" onClick={() => setShowCatManager(true)} className="text-gray-500 border-dashed text-xs gap-1">
+            <Settings2 className="w-3.5 h-3.5" /> Categorías
+          </Button>
           <Button variant="outline" onClick={handleExport} disabled={exporting}>
             <FileSpreadsheet className="w-4 h-4 mr-1" />
             {exporting ? 'Generando...' : 'Exportar Excel'}
@@ -245,6 +359,7 @@ export default function CajaPage() {
               <TableRow>
                 <TableHead>Fecha</TableHead>
                 <TableHead>Descripción</TableHead>
+                <TableHead>Cliente</TableHead>
                 <TableHead>Categoría</TableHead>
                 <TableHead>Espacio</TableHead>
                 <TableHead>Método</TableHead>
@@ -256,7 +371,7 @@ export default function CajaPage() {
               {isLoading
                 ? Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i}>
-                      {Array.from({ length: 7 }).map((_, j) => (
+                      {Array.from({ length: 8 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full" /></TableCell>
                       ))}
                     </TableRow>
@@ -266,15 +381,13 @@ export default function CajaPage() {
                       <TableCell className="text-gray-500 text-xs whitespace-nowrap">{p.payment_date}</TableCell>
                       <TableCell>
                         <p className="text-sm font-medium">
-                          {p.description || p.instructor_name || p.client_name || '—'}
+                          {p.description || p.instructor_name || '—'}
                         </p>
-                        {p.description && p.client_name && (
-                          <p className="text-xs text-gray-500">{p.client_name}</p>
-                        )}
                         {p.description && p.instructor_name && (
                           <p className="text-xs text-gray-500">{p.instructor_name}</p>
                         )}
                       </TableCell>
+                      <TableCell className="text-sm text-gray-700">{p.client_name || <span className="text-gray-400 text-xs">—</span>}</TableCell>
                       <TableCell className="text-xs text-gray-600">{categoryLabels[p.category] || p.category}</TableCell>
                       <TableCell>
                         {p.space_name ? (
@@ -304,7 +417,7 @@ export default function CajaPage() {
                   ))}
               {!isLoading && filteredList.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-400 text-sm py-10">
+                  <TableCell colSpan={8} className="text-center text-gray-400 text-sm py-10">
                     Sin registros en este período
                   </TableCell>
                 </TableRow>
@@ -317,14 +430,77 @@ export default function CajaPage() {
       {/* Income modal */}
       <Dialog open={showIncome} onOpenChange={setShowIncome}>
         <DialogContent title="Registrar ingreso">
-          <PaymentForm type="income" spaces={spacesList} onClose={() => { setShowIncome(false); invalidate() }} />
+          <PaymentForm type="income" spaces={spacesList} customCats={customCats.income} onClose={() => { setShowIncome(false); invalidate() }} />
         </DialogContent>
       </Dialog>
 
       {/* Expense modal */}
       <Dialog open={showExpense} onOpenChange={setShowExpense}>
         <DialogContent title="Registrar egreso">
-          <PaymentForm type="expense" spaces={spacesList} onClose={() => { setShowExpense(false); invalidate() }} />
+          <PaymentForm type="expense" spaces={spacesList} customCats={customCats.expense} onClose={() => { setShowExpense(false); invalidate() }} />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: gestionar categorías */}
+      <Dialog open={showCatManager} onOpenChange={setShowCatManager}>
+        <DialogContent title="Gestionar categorías">
+          <div className="space-y-5 py-2">
+            {(['income', 'expense'] as const).map(t => {
+              const list = t === 'income' ? customCats.income : customCats.expense
+              const builtIn = t === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+              return (
+                <div key={t}>
+                  <p className="text-sm font-semibold text-gray-700 mb-2">{t === 'income' ? 'Ingresos' : 'Egresos'}</p>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {builtIn.map(([, label]) => (
+                      <span key={label} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">{label}</span>
+                    ))}
+                    {list.map(label => (
+                      <span key={label} className="text-xs px-2 py-1 rounded-full bg-primary-100 text-primary-700 flex items-center gap-1">
+                        {label}
+                        <button
+                          onClick={() => deleteCatMutation.mutate({ type: t, label })}
+                          className="hover:text-red-500 ml-0.5"
+                        >×</button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+            <div className="border-t pt-4 space-y-3">
+              <p className="text-sm font-medium text-gray-700">Agregar categoría</p>
+              <div className="flex gap-2">
+                <select
+                  value={newCatType}
+                  onChange={e => setNewCatType(e.target.value as 'income' | 'expense')}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="income">Ingreso</option>
+                  <option value="expense">Egreso</option>
+                </select>
+                <Input
+                  placeholder="Nombre de la categoría"
+                  value={newCatLabel}
+                  onChange={e => setNewCatLabel(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newCatLabel.trim()) {
+                      addCatMutation.mutate({ type: newCatType, label: newCatLabel.trim() })
+                    }
+                  }}
+                  className="flex-1"
+                />
+                <Button
+                  onClick={() => { if (newCatLabel.trim()) addCatMutation.mutate({ type: newCatType, label: newCatLabel.trim() }) }}
+                  disabled={!newCatLabel.trim() || addCatMutation.isPending}
+                  className="bg-primary-600 hover:bg-primary-700 text-white"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400">Las categorías predeterminadas no se pueden eliminar.</p>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -332,9 +508,13 @@ export default function CajaPage() {
   )
 }
 
-function PaymentForm({ type, spaces, onClose }: { type: 'income' | 'expense'; spaces: Space[]; onClose: () => void }) {
+function PaymentForm({ type, spaces, customCats = [], onClose }: { type: 'income' | 'expense'; spaces: Space[]; customCats?: string[]; onClose: () => void }) {
   const currency = getTenantCurrency()
-  const categories = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const builtIn = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+  const categories = [
+    ...builtIn,
+    ...customCats.map(label => [label, label] as [string, string]),
+  ]
   const methods = [
     ['cash', 'Efectivo'],
     ['transfer', 'Transferencia'],

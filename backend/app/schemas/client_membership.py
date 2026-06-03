@@ -22,6 +22,8 @@ class ClientMembershipUpdate(BaseModel):
     end_date: Optional[date] = None
     status: Optional[str] = None
     notes: Optional[str] = None
+    sessions_per_week: Optional[int] = None
+    scheduled_days: Optional[List[str]] = None
     preferred_days: Optional[list[int]] = None
     preferred_hour: Optional[int] = None
     preferred_space_id: Optional[uuid.UUID] = None

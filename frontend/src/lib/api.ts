@@ -82,6 +82,12 @@ export const auth = {
     apiClient.post<TokenResponse>('/auth/refresh', { refresh_token }).then((r) => r.data),
   updateCurrency: (currency: string) =>
     apiClient.put<{ currency: string; message: string }>('/auth/tenant-settings', { currency }).then((r) => r.data),
+  getCustomCategories: () =>
+    apiClient.get<{ income: string[]; expense: string[] }>('/auth/custom-categories').then((r) => r.data),
+  addCustomCategory: (type: 'income' | 'expense', label: string) =>
+    apiClient.post<{ income: string[]; expense: string[] }>('/auth/custom-categories', { type, label }).then((r) => r.data),
+  deleteCustomCategory: (type: 'income' | 'expense', label: string) =>
+    apiClient.delete<{ income: string[]; expense: string[] }>('/auth/custom-categories', { data: { type, label } }).then((r) => r.data),
 }
 
 // ── Class Types ───────────────────────────────────────────────
@@ -113,6 +119,8 @@ export const classSessions = {
     ).then((r) => r.data),
   checkSchedule: (data: { start_date: string; schedule: { day: number; hour: number; space_id?: string }[]; weeks_ahead?: number }) =>
     apiClient.post<{ sessions_found: number; matching_dates: string[] }>('/class-sessions/check-schedule', data).then((r) => r.data),
+  coverage: () =>
+    apiClient.get<{ space_id: string | null; space_name: string; last_date: string | null }[]>('/class-sessions/coverage').then((r) => r.data),
 }
 
 // ── Clients ───────────────────────────────────────────────────

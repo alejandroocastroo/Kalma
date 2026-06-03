@@ -758,6 +758,12 @@ export default function AgendaPage() {
     queryFn: spaces.list,
   })
 
+  const { data: coverage = [] } = useQuery({
+    queryKey: ['sessions-coverage'],
+    queryFn: classSessions.coverage,
+    staleTime: 5 * 60 * 1000,
+  })
+
   // Cast sessions to SessionWithSpace to access optional space_id field
   const typedSessions = sessions as SessionWithSpace[]
 
@@ -1000,6 +1006,36 @@ export default function AgendaPage() {
           >
             Hoy
           </button>
+          {/* Indicador de cobertura de sesiones */}
+          {coverage.length > 0 && (
+            <div className="relative group">
+              <button className="p-1.5 rounded-xl text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </button>
+              <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 hidden group-hover:block">
+                <div className="bg-gray-900 text-white text-xs rounded-xl shadow-lg px-3 py-2.5 w-56 space-y-1.5">
+                  <p className="font-semibold text-gray-300 mb-1">Sesiones creadas hasta:</p>
+                  {coverage.map((c, i) => (
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <span className="text-gray-300 truncate">{c.space_name}</span>
+                      <span className={`font-medium whitespace-nowrap ${c.last_date ? 'text-white' : 'text-red-400'}`}>
+                        {c.last_date ?? 'Sin sesiones'}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-700 pt-1.5 mt-1.5 text-gray-500 text-[10px]">
+                    Solo sesiones futuras activas
+                  </div>
+                </div>
+                {/* flecha */}
+                <div className="absolute left-1/2 -translate-x-1/2 -top-1.5 w-3 h-1.5 overflow-hidden">
+                  <div className="bg-gray-900 w-3 h-3 rotate-45 translate-y-1 mx-auto" />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
         <Button onClick={() => setShowCreateModal(true)}>
           <Plus className="w-4 h-4" /> Nueva sesión
