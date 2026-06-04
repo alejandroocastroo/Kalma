@@ -74,12 +74,19 @@ async def apply_attendance(db: AsyncSession, appt, space_id=None) -> None:
     - Para session_based/weekly_sessions: solo sessions_used.
     - Para monthly: no descuenta.
     """
+    session = None
     if space_id is None:
         session = await db.get(ClassSession, appt.class_session_id)
         space_id = session.space_id if session else None
 
     m = await _select_membership_for_space(db, appt.client_id, appt.tenant_id, space_id)
     if not m:
+        return
+
+    # No contar clases que ocurrieron antes de que inicie la membresía
+    if session is None:
+        session = await db.get(ClassSession, appt.class_session_id)
+    if session and m.start_date and session.start_datetime.date() < m.start_date:
         return
 
     if m.membership_type in HYBRID_TYPES and space_id:

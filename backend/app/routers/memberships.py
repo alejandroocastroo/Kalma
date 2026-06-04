@@ -367,7 +367,7 @@ async def create_membership_v2(
 
     # Conteo retroactivo: si start_date está en el pasado, buscar asistencias
     # del cliente en ese rango y ajustar sessions_used / space_usage.
-    if body.membership_type != "monthly" and body.start_date < date.today():
+    if body.membership_type != "monthly" and body.start_date <= date.today():
         now_utc = datetime.now(timezone.utc)
         start_dt = datetime(body.start_date.year, body.start_date.month, body.start_date.day, tzinfo=timezone.utc)
 

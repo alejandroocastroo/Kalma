@@ -213,17 +213,22 @@ async def get_cobros(
     # 6. Sort: priority asc, then secondary sort
     # ------------------------------------------------------------------ #
     def sort_key(c: CobrosClientResponse):
-        secondary = 0
-        if c.priority == 3:
+        secondary: float = 0
+        if c.priority == 1:
+            # Ordenar por el datetime más próximo de la deuda (ascendente)
+            datetimes = [d.start_datetime for d in c.debt_details if d.start_datetime is not None]
+            if datetimes:
+                secondary = min(dt.timestamp() for dt in datetimes)
+        elif c.priority == 3:
             if c.membership_type == "session_based":
-                secondary = c.sessions_remaining or 99
+                secondary = float(c.sessions_remaining or 99)
             elif c.next_billing_date:
-                secondary = (c.next_billing_date - today).days
+                secondary = float((c.next_billing_date - today).days)
         elif c.priority == 4:
             if c.expiry_date:
-                secondary = (c.expiry_date - today).days
+                secondary = float((c.expiry_date - today).days)
             elif c.next_billing_date:
-                secondary = (c.next_billing_date - today).days
+                secondary = float((c.next_billing_date - today).days)
         return (c.priority, secondary)
 
     cobros.sort(key=sort_key)
