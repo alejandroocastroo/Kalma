@@ -1,15 +1,15 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { clients } from '@/lib/api'
+import { clients, appointments as appointmentsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getInitials, formatDate, appointmentStatusConfig } from '@/lib/utils'
-import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake } from 'lucide-react'
+import { getInitials, formatDate, formatTime, appointmentStatusConfig } from '@/lib/utils'
+import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client } from '@/types'
 
@@ -44,10 +44,17 @@ export default function ClientesPage() {
     queryFn: () => clients.birthdays(),
   })
 
-  const { data: clientAppointments = [] } = useQuery({
+  const { data: clientAppointments = [], refetch: refetchAppts } = useQuery({
     queryKey: ['client-appointments', selected?.id],
     queryFn: () => clients.appointments(selected!.id),
     enabled: !!selected,
+  })
+
+  const saveNoteMutation = useMutation({
+    mutationFn: ({ apptId, notes }: { apptId: string; notes: string }) =>
+      appointmentsApi.update(apptId, { notes: notes || undefined }),
+    onSuccess: () => refetchAppts(),
+    onError: () => toast.error('No se pudo guardar la nota'),
   })
 
   return (
@@ -170,10 +177,7 @@ export default function ClientesPage() {
                   <p className="text-gray-500">Documento</p>
                   <p className="font-medium">{selected.document_type} {selected.document_number || '—'}</p>
                 </div>
-                <div>
-                  <p className="text-gray-500">Total sesiones</p>
-                  <p className="font-medium text-lg">{selected.total_sessions}</p>
-                </div>
+
                 {selected.birth_date && (
                   <div className="flex items-center gap-2 text-gray-600">
                     <Cake className="w-4 h-4 text-gray-400" />
@@ -194,27 +198,14 @@ export default function ClientesPage() {
                 {clientAppointments.length === 0 ? (
                   <p className="text-gray-400 text-sm">Sin citas registradas</p>
                 ) : (
-                  <div className="space-y-2">
-                    {clientAppointments.map((appt: any) => {
-                      const cfg = appointmentStatusConfig[appt.status]
-                      const dt = appt.session_start ? new Date(appt.session_start) : null
-                      const dateStr = dt ? dt.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
-                      const timeStr = dt ? dt.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false }) : ''
-                      return (
-                        <div key={appt.id} className="flex items-start justify-between py-2 border-b border-gray-50">
-                          <div>
-                            <p className="text-sm font-medium text-gray-800">{appt.class_type_name || '—'}</p>
-                            <p className="text-xs text-gray-500">
-                              {dateStr}{timeStr ? ` · ${timeStr}` : ''}
-                              {appt.space_name ? <span className="ml-1 text-gray-400">· {appt.space_name}</span> : null}
-                            </p>
-                          </div>
-                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ml-2 ${cfg?.className}`}>
-                            {cfg?.label}
-                          </span>
-                        </div>
-                      )
-                    })}
+                  <div className="space-y-1">
+                    {clientAppointments.map((appt: any) => (
+                      <AppointmentRow
+                        key={appt.id}
+                        appt={appt}
+                        onSaveNote={(notes) => saveNoteMutation.mutate({ apptId: appt.id, notes })}
+                      />
+                    ))}
                   </div>
                 )}
               </div>
@@ -242,6 +233,82 @@ export default function ClientesPage() {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function AppointmentRow({ appt, onSaveNote }: { appt: any; onSaveNote: (notes: string) => void }) {
+  const cfg = appointmentStatusConfig[appt.status]
+  const dateStr = appt.session_start ? formatDate(appt.session_start) : '—'
+  const timeStr = appt.session_start ? formatTime(appt.session_start) : ''
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(appt.notes || '')
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const handleOpen = () => {
+    setDraft(appt.notes || '')
+    setEditing(true)
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }
+
+  const handleSave = () => {
+    onSaveNote(draft.trim())
+    setEditing(false)
+  }
+
+  const handleCancel = () => {
+    setDraft(appt.notes || '')
+    setEditing(false)
+  }
+
+  return (
+    <div className="py-2 border-b border-gray-50">
+      <div className="flex items-start justify-between">
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800">{appt.class_type_name || '—'}</p>
+          <p className="text-xs text-gray-500">
+            {dateStr}{timeStr ? ` · ${timeStr}` : ''}
+            {appt.space_name ? <span className="ml-1 text-gray-400">· {appt.space_name}</span> : null}
+          </p>
+          {!editing && appt.notes && (
+            <p className="mt-1 text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 leading-relaxed">{appt.notes}</p>
+          )}
+          {editing && (
+            <div className="mt-2 flex flex-col gap-1.5">
+              <textarea
+                ref={textareaRef}
+                value={draft}
+                onChange={e => setDraft(e.target.value)}
+                placeholder="Ej: Avisó que asistiría pero no canceló a tiempo..."
+                rows={2}
+                className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-gray-300 resize-none focus:outline-none focus:ring-2 focus:ring-primary-400"
+              />
+              <div className="flex gap-1.5">
+                <button onClick={handleSave} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg bg-primary-600 text-white hover:bg-primary-700">
+                  <Check className="w-3 h-3" /> Guardar
+                </button>
+                <button onClick={handleCancel} className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50">
+                  <X className="w-3 h-3" /> Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-2 ml-2 shrink-0">
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cfg?.className}`}>
+            {cfg?.label}
+          </span>
+          {!editing && (
+            <button
+              onClick={handleOpen}
+              title={appt.notes ? 'Editar nota' : 'Agregar nota'}
+              className={`p-1 rounded-lg transition-colors ${appt.notes ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-300 hover:text-gray-500 hover:bg-gray-50'}`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   )
 }

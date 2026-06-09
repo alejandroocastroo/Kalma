@@ -83,11 +83,15 @@ export const auth = {
   updateCurrency: (currency: string) =>
     apiClient.put<{ currency: string; message: string }>('/auth/tenant-settings', { currency }).then((r) => r.data),
   getCustomCategories: () =>
-    apiClient.get<{ income: string[]; expense: string[] }>('/auth/custom-categories').then((r) => r.data),
+    apiClient.get<{ income: string[]; expense: string[]; hidden: { income: string[]; expense: string[] } }>('/auth/custom-categories').then((r) => r.data),
   addCustomCategory: (type: 'income' | 'expense', label: string) =>
-    apiClient.post<{ income: string[]; expense: string[] }>('/auth/custom-categories', { type, label }).then((r) => r.data),
+    apiClient.post<{ income: string[]; expense: string[]; hidden: { income: string[]; expense: string[] } }>('/auth/custom-categories', { type, label }).then((r) => r.data),
   deleteCustomCategory: (type: 'income' | 'expense', label: string) =>
-    apiClient.delete<{ income: string[]; expense: string[] }>('/auth/custom-categories', { data: { type, label } }).then((r) => r.data),
+    apiClient.delete<{ income: string[]; expense: string[]; hidden: { income: string[]; expense: string[] } }>('/auth/custom-categories', { data: { type, label } }).then((r) => r.data),
+  hideDefaultCategory: (type: 'income' | 'expense', key: string) =>
+    apiClient.post<{ income: string[]; expense: string[] }>('/auth/hidden-categories', { type, key }).then((r) => r.data),
+  showDefaultCategory: (type: 'income' | 'expense', key: string) =>
+    apiClient.delete<{ income: string[]; expense: string[] }>('/auth/hidden-categories', { data: { type, key } }).then((r) => r.data),
 }
 
 // ── Class Types ───────────────────────────────────────────────

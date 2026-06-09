@@ -238,6 +238,7 @@ async def client_appointments(
             "space_name": space_name,
             "client_name": client_name,
             "client_phone": client_phone,
+            "notes": appt.notes,
             "created_at": appt.created_at.isoformat(),
         })
     return enriched

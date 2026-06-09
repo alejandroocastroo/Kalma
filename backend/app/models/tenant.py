@@ -26,6 +26,8 @@ class Tenant(Base, TimestampMixin):
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="COP")
     custom_categories: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # {"income": ["Yoga especial", "Taller"], "expense": ["Cafetería"]}
+    hidden_categories: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # {"income": ["clase_dia"], "expense": ["seguros"]}
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     users = relationship("User", back_populates="tenant", lazy="noload")

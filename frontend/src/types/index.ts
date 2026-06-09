@@ -81,7 +81,6 @@ export interface Client {
   emergency_contact_name?: string
   emergency_contact_phone?: string
   notes?: string | null
-  total_sessions: number
   is_active: boolean
   created_at: string
   active_plan_name?: string | null

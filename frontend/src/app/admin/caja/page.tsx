@@ -121,7 +121,7 @@ export default function CajaPage() {
     queryFn: () => spacesApi.list(),
   })
 
-  const { data: customCats = { income: [], expense: [] }, refetch: refetchCats } = useQuery({
+  const { data: customCats = { income: [], expense: [], hidden: { income: [], expense: [] } }, refetch: refetchCats } = useQuery({
     queryKey: ['custom-categories'],
     queryFn: () => authApi.getCustomCategories(),
     staleTime: 10 * 60 * 1000,
@@ -137,6 +137,18 @@ export default function CajaPage() {
   const deleteCatMutation = useMutation({
     mutationFn: ({ type, label }: { type: 'income' | 'expense'; label: string }) =>
       authApi.deleteCustomCategory(type, label),
+    onSuccess: () => refetchCats(),
+  })
+
+  const hideCatMutation = useMutation({
+    mutationFn: ({ type, key }: { type: 'income' | 'expense'; key: string }) =>
+      authApi.hideDefaultCategory(type, key),
+    onSuccess: () => refetchCats(),
+  })
+
+  const showCatMutation = useMutation({
+    mutationFn: ({ type, key }: { type: 'income' | 'expense'; key: string }) =>
+      authApi.showDefaultCategory(type, key),
     onSuccess: () => refetchCats(),
   })
 
@@ -430,14 +442,14 @@ export default function CajaPage() {
       {/* Income modal */}
       <Dialog open={showIncome} onOpenChange={setShowIncome}>
         <DialogContent title="Registrar ingreso">
-          <PaymentForm type="income" spaces={spacesList} customCats={customCats.income} onClose={() => { setShowIncome(false); invalidate() }} />
+          <PaymentForm type="income" spaces={spacesList} customCats={customCats.income} hiddenKeys={customCats.hidden?.income ?? []} onClose={() => { setShowIncome(false); invalidate() }} />
         </DialogContent>
       </Dialog>
 
       {/* Expense modal */}
       <Dialog open={showExpense} onOpenChange={setShowExpense}>
         <DialogContent title="Registrar egreso">
-          <PaymentForm type="expense" spaces={spacesList} customCats={customCats.expense} onClose={() => { setShowExpense(false); invalidate() }} />
+          <PaymentForm type="expense" spaces={spacesList} customCats={customCats.expense} hiddenKeys={customCats.hidden?.expense ?? []} onClose={() => { setShowExpense(false); invalidate() }} />
         </DialogContent>
       </Dialog>
 
@@ -448,13 +460,32 @@ export default function CajaPage() {
             {(['income', 'expense'] as const).map(t => {
               const list = t === 'income' ? customCats.income : customCats.expense
               const builtIn = t === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
+              const hiddenKeys: string[] = customCats.hidden?.[t] ?? []
               return (
                 <div key={t}>
                   <p className="text-sm font-semibold text-gray-700 mb-2">{t === 'income' ? 'Ingresos' : 'Egresos'}</p>
                   <div className="flex flex-wrap gap-1.5 mb-2">
-                    {builtIn.map(([, label]) => (
-                      <span key={label} className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-500">{label}</span>
-                    ))}
+                    {builtIn.map(([key, label]) => {
+                      const isHidden = hiddenKeys.includes(key)
+                      return (
+                        <span
+                          key={key}
+                          className={`text-xs px-2 py-1 rounded-full flex items-center gap-1 ${isHidden ? 'bg-red-50 text-red-400 line-through' : 'bg-gray-100 text-gray-500'}`}
+                        >
+                          {label}
+                          <button
+                            title={isHidden ? 'Restaurar' : 'Ocultar'}
+                            onClick={() => isHidden
+                              ? showCatMutation.mutate({ type: t, key })
+                              : hideCatMutation.mutate({ type: t, key })
+                            }
+                            className={`ml-0.5 text-xs leading-none ${isHidden ? 'hover:text-green-600' : 'hover:text-red-500'}`}
+                          >
+                            {isHidden ? '↩' : '×'}
+                          </button>
+                        </span>
+                      )
+                    })}
                     {list.map(label => (
                       <span key={label} className="text-xs px-2 py-1 rounded-full bg-primary-100 text-primary-700 flex items-center gap-1">
                         {label}
@@ -498,7 +529,7 @@ export default function CajaPage() {
                   <Plus className="w-4 h-4" />
                 </Button>
               </div>
-              <p className="text-xs text-gray-400">Las categorías predeterminadas no se pueden eliminar.</p>
+              <p className="text-xs text-gray-400">Presiona × en una categoría predeterminada para ocultarla. Usa ↩ para restaurarla.</p>
             </div>
           </div>
         </DialogContent>
@@ -508,11 +539,11 @@ export default function CajaPage() {
   )
 }
 
-function PaymentForm({ type, spaces, customCats = [], onClose }: { type: 'income' | 'expense'; spaces: Space[]; customCats?: string[]; onClose: () => void }) {
+function PaymentForm({ type, spaces, customCats = [], hiddenKeys = [], onClose }: { type: 'income' | 'expense'; spaces: Space[]; customCats?: string[]; hiddenKeys?: string[]; onClose: () => void }) {
   const currency = getTenantCurrency()
   const builtIn = type === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES
   const categories = [
-    ...builtIn,
+    ...builtIn.filter(([key]) => !hiddenKeys.includes(key)),
     ...customCats.map(label => [label, label] as [string, string]),
   ]
   const methods = [
