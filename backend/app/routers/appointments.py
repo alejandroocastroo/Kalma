@@ -1,5 +1,5 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
 from typing import Optional
@@ -14,7 +14,6 @@ from app.models.appointment import Appointment
 from app.models.class_session import ClassSession
 from app.models.client import Client
 from app.models.class_type import ClassType
-from app.models.client_membership import ClientMembership
 from app.models.payment import Payment
 from app.models.space import Space
 from app.utils.attendance import apply_attendance, revert_attendance

@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getInitials } from '@/lib/utils'
+import { getInitials, getApiErrorMessage } from '@/lib/utils'
 import { Search, Plus, Phone, Mail, Edit, Calendar, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Instructor, InstructorSession } from '@/types'
@@ -277,9 +277,8 @@ function InstructorForm({ onClose, initial }: { onClose: () => void; initial?: I
         toast.success('Instructor creado')
       }
       onClose()
-    } catch (err: any) {
-      const detail = err?.response?.data?.detail
-      toast.error(typeof detail === 'string' ? detail : 'Error al guardar')
+    } catch (err) {
+      toast.error(getApiErrorMessage(err, 'Error al guardar'))
     } finally {
       setLoading(false)
     }

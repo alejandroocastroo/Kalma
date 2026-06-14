@@ -27,6 +27,4 @@ Thumbs.db
 .idea/
 *.swp
 cloudflared.deb
-cloudflared.deb
-frontend/tsconfig.tsbuildinfo
 frontend/tsconfig.tsbuildinfo

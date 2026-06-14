@@ -2,21 +2,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { schedule, spaces, classSessions } from '@/lib/api'
-import type { Space } from '@/types'
 import { Button } from '@/components/ui/button'
 import { AlertTriangle, CalendarDays, CheckCircle2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import {
-  format, addDays, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
-  eachDayOfInterval, isWithinInterval, isSameDay, getDay, addMonths,
+  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  eachDayOfInterval, isWithinInterval, getDay, addMonths,
   parseISO, isSameMonth,
 } from 'date-fns'
 import { es } from 'date-fns/locale'
 import type { GenerateSessionsResult } from '@/types'
 
 const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${i}:00` }))
-
-const DAY_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
 
 // ─── BlockedDaysPicker ────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatsCard } from '@/components/admin/stats-card'
-import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels, getApiErrorMessage } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet, Settings2 } from 'lucide-react'
@@ -131,7 +131,7 @@ export default function CajaPage() {
     mutationFn: ({ type, label }: { type: 'income' | 'expense'; label: string }) =>
       authApi.addCustomCategory(type, label),
     onSuccess: () => { refetchCats(); setNewCatLabel('') },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al agregar categoría'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al agregar categoría')),
   })
 
   const deleteCatMutation = useMutation({

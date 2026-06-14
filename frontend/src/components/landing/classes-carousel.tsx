@@ -11,12 +11,11 @@ interface Clase {
 interface Props {
   clases: Clase[]
   fadeColor?: string
-  accentColor?: string
 }
 
 const SPEED = 0.6 // px por frame
 
-export function ClassesCarousel({ clases, fadeColor = 'white', accentColor }: Props) {
+export function ClassesCarousel({ clases, fadeColor = 'white' }: Props) {
   const items = [...clases, ...clases] // duplicado para loop infinito
 
   const trackRef  = useRef<HTMLDivElement>(null)

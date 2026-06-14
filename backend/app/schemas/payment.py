@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional, Dict, List
+from typing import Optional, Dict
 from pydantic import BaseModel
 
 

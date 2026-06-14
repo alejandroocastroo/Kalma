@@ -1,7 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { classSessions, appointments, spaces, clients, classTypes, memberships, instructors as instructorsApi, apiClient } from '@/lib/api'
+import { classSessions, appointments, spaces, clients, classTypes, memberships, instructors as instructorsApi } from '@/lib/api'
 import { SessionCard } from '@/components/admin/session-card'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -744,7 +744,7 @@ export default function AgendaPage() {
   const weekStart = startOfWeek(currentWeek, { weekStartsOn: 1 })
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
 
-  const { data: sessions = [], isLoading } = useQuery({
+  const { data: sessions = [] } = useQuery({
     queryKey: ['week-sessions', format(weekStart, 'yyyy-MM-dd')],
     queryFn: () =>
       classSessions.list({

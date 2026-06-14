@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getInitials, formatDate, formatTime, appointmentStatusConfig } from '@/lib/utils'
+import { getInitials, formatDate, formatTime, appointmentStatusConfig, getApiErrorMessage } from '@/lib/utils'
 import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client } from '@/types'
@@ -415,11 +415,10 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
       toast.success('Cliente creado')
       onClose()
     } catch (err: any) {
-      const detail = err?.response?.data?.detail
       if (err?.response?.status === 409) {
-        setDocError(typeof detail === 'string' ? detail : 'Ya existe un cliente con ese número de documento')
+        setDocError(getApiErrorMessage(err, 'Ya existe un cliente con ese número de documento'))
       } else {
-        toast.error(typeof detail === 'string' ? detail : 'Error al guardar')
+        toast.error(getApiErrorMessage(err, 'Error al guardar'))
       }
     } finally { setLoading(false) }
   }
@@ -462,11 +461,10 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
         await doCreate()
       }
     } catch (err: any) {
-      const detail = err?.response?.data?.detail
       if (err?.response?.status === 409) {
-        setDocError(typeof detail === 'string' ? detail : 'Ya existe un cliente con ese número de documento')
+        setDocError(getApiErrorMessage(err, 'Ya existe un cliente con ese número de documento'))
       } else {
-        toast.error(typeof detail === 'string' ? detail : 'Error al guardar')
+        toast.error(getApiErrorMessage(err, 'Error al guardar'))
       }
       setLoading(false)
     }

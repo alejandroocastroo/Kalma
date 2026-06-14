@@ -2,7 +2,7 @@ import re
 import uuid
 from datetime import date, datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, field_validator
 
 
 def _validate_document_number(v: Optional[str]) -> Optional[str]:

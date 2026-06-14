@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Plus, Pencil, Trash2, Calendar, DollarSign, X } from 'lucide-react'
 import { plans as plansApi, spaces as spacesApi } from '@/lib/api'
 import type { Plan, SpaceQuota, MembershipType } from '@/types'
-import { formatCurrency, getCurrencyLocale } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale, getApiErrorMessage } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { CurrencyInput } from '@/components/ui/currency-input'
 import { Button } from '@/components/ui/button'
@@ -68,7 +68,7 @@ export default function PlanesPage() {
       toast.success(editing ? 'Plan actualizado' : 'Plan creado')
       setDialogOpen(false)
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al guardar el plan'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al guardar el plan')),
   })
 
   const deleteMutation = useMutation({
@@ -77,7 +77,7 @@ export default function PlanesPage() {
       qc.invalidateQueries({ queryKey: ['plans'] })
       toast.success('Plan eliminado')
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al eliminar'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al eliminar')),
   })
 
   const isHybrid = HYBRID_TYPES.includes(form.membership_type)

@@ -1,5 +1,5 @@
 from datetime import date, timedelta
-from typing import List, Optional
+from typing import List
 
 DAY_MAP = {
     "monday": 0, "tuesday": 1, "wednesday": 2,

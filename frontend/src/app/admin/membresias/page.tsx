@@ -2,10 +2,10 @@
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { Plus, RotateCcw, Pencil, RefreshCw, Calendar, ChevronRight, CheckCircle2, ArrowRight, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { Plus, RotateCcw, Pencil, RefreshCw, Calendar, ChevronRight, CheckCircle2 } from 'lucide-react'
 import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi, classSessions, payments as paymentsApi } from '@/lib/api'
 import type { ClientMembership, Plan, Client, WeeklyStats, AutoBookResult, ClassSession } from '@/types'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, getApiErrorMessage } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -66,75 +66,6 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: 'paused', label: 'Pausadas' },
   { key: 'cancelled', label: 'Canceladas' },
 ]
-
-function formatShortDate(dateStr: string): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  return new Date(year, month - 1, day).toLocaleDateString('es-CO', { day: 'numeric', month: 'short' })
-}
-
-function MakeupSessionsBlock({ makeupSessions }: { makeupSessions: { id: string; original_date: string; makeup_date: string | null; status: string }[] }) {
-  const [showCompleted, setShowCompleted] = useState(false)
-  if (!makeupSessions?.length) return null
-
-  const pending   = makeupSessions.filter(s => s.status === 'pending')
-  const completed = makeupSessions.filter(s => s.status === 'completed')
-  const cancelled = makeupSessions.filter(s => s.status === 'cancelled')
-
-  return (
-    <div className="mt-1 space-y-1.5">
-      <div className="border-t border-gray-100" />
-
-      {pending.map(s => (
-        <div key={s.id} className="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200/70 px-2.5 py-1.5">
-          <RotateCcw className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-          <span className="text-xs font-medium text-amber-700">Reposición pendiente</span>
-          <div className="ml-auto flex items-center gap-1 text-xs text-amber-600">
-            <span>{formatShortDate(s.original_date)}</span>
-            <ArrowRight className="h-3 w-3" />
-            {s.makeup_date
-              ? <span className="font-medium text-amber-700">{formatShortDate(s.makeup_date)}</span>
-              : <span className="italic text-amber-400">sin fecha</span>
-            }
-          </div>
-        </div>
-      ))}
-
-      {(completed.length > 0 || cancelled.length > 0) && (
-        <div>
-          <button
-            onClick={() => setShowCompleted(v => !v)}
-            className="flex items-center gap-1.5 px-0.5 py-1 text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            {showCompleted ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-            {completed.length + cancelled.length} reposición{completed.length + cancelled.length > 1 ? 'es' : ''} anterior{completed.length + cancelled.length > 1 ? 'es' : ''}
-          </button>
-          {showCompleted && (
-            <div className="space-y-1 mt-1">
-              {completed.map(s => (
-                <div key={s.id} className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200/60 px-2.5 py-1.5">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
-                  <span className="text-xs font-medium text-emerald-700">Repuesta</span>
-                  <div className="ml-auto flex items-center gap-1 text-xs text-emerald-600/70">
-                    <span className="line-through opacity-60">{formatShortDate(s.original_date)}</span>
-                    <ArrowRight className="h-3 w-3" />
-                    {s.makeup_date && <span>{formatShortDate(s.makeup_date)}</span>}
-                  </div>
-                </div>
-              ))}
-              {cancelled.map(s => (
-                <div key={s.id} className="flex items-center gap-2 rounded-lg bg-gray-50 border border-gray-200/70 px-2.5 py-1.5">
-                  <XCircle className="h-3.5 w-3.5 shrink-0 text-gray-400" />
-                  <span className="text-xs font-medium text-gray-500">Cancelada</span>
-                  <span className="ml-auto text-xs text-gray-400 line-through">{formatShortDate(s.original_date)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
 
 function MakeupDialogContent({
   membership, step, originalDate, selectedSession, sessionSearch,
@@ -411,10 +342,7 @@ export default function MembresiasPage() {
         toast.success('Horario guardado. No hay sesiones creadas aún para esos días/hora este mes.')
       }
     },
-    onError: (e: unknown) => {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      toast.error(detail || 'No se pudo agendar automáticamente. Verifica el horario configurado.')
-    },
+    onError: (e) => toast.error(getApiErrorMessage(e, 'No se pudo agendar automáticamente. Verifica el horario configurado.')),
   })
 
   const createMutation = useMutation({
@@ -428,7 +356,7 @@ export default function MembresiasPage() {
         autoBookMutation.mutate(created.id)
       }
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al crear membresía'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al crear membresía')),
   })
 
   const createV2Mutation = useMutation({
@@ -443,7 +371,7 @@ export default function MembresiasPage() {
         : false
       if (shouldAutoBook) autoBookMutation.mutate(created.id)
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al crear membresía'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al crear membresía')),
   })
 
   const updateMutation = useMutation({
@@ -458,7 +386,7 @@ export default function MembresiasPage() {
         : false
       if (shouldAutoBook) autoBookMutation.mutate(updated.id)
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al actualizar'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al actualizar')),
   })
 
   const createMakeupMutation = useMutation({
@@ -472,7 +400,7 @@ export default function MembresiasPage() {
       setMakeupOriginalDate('')
       setMakeupSelectedSession(null)
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al registrar reposición'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al registrar reposición')),
   })
 
   const addBonusMutation = useMutation({
@@ -485,7 +413,7 @@ export default function MembresiasPage() {
       setBonusQuantity('1')
       setBonusNotes('')
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al agregar clases'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al agregar clases')),
   })
 
   const renewMutation = useMutation({
@@ -498,7 +426,7 @@ export default function MembresiasPage() {
       setRenewTarget(null)
       setRenewDate('')
     },
-    onError: (e: any) => toast.error(e?.response?.data?.detail || 'Error al renovar membresía'),
+    onError: (e) => toast.error(getApiErrorMessage(e, 'Error al renovar membresía')),
   })
 
   const SCHEDULED_DAYS = [
@@ -1261,7 +1189,7 @@ export default function MembresiasPage() {
                         return spaceEntries.length > 0 ? (
                           <div className="space-y-1.5 pt-1">
                             <p className="text-xs text-gray-500">Hora por día <span className="text-gray-400">(opcional)</span></p>
-                            {spaceEntries.map((entry, ei) => (
+                            {spaceEntries.map((entry) => (
                               <div key={`${q.space_id}-${entry.day}`} className="flex items-center gap-2">
                                 <span className="text-xs text-gray-600 w-16 shrink-0">{DAY_NUM_LABELS[entry.day]}</span>
                                 <select

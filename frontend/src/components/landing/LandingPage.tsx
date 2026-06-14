@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import Link from 'next/link'
 import {
   CalendarDays, Users, CreditCard, BarChart3,
   RotateCcw, DollarSign, ArrowRight, Mail,
@@ -463,12 +464,12 @@ function Footer() {
         <p className="text-gray-600 text-sm">
           © {new Date().getFullYear()} Kalma · usekalma.com · Hecho en Colombia
         </p>
-        <a
+        <Link
           href="/login"
           className="text-gray-500 hover:text-gray-300 text-sm transition-colors"
         >
           Acceso clientes →
-        </a>
+        </Link>
       </div>
     </footer>
   )

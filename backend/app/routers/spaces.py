@@ -1,7 +1,7 @@
 import json
 import uuid
-from datetime import date, datetime, timezone
-from typing import List, Optional
+from datetime import datetime
+from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, text

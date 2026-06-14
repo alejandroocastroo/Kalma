@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { auth } from '@/lib/api'
 import { saveAuthData } from '@/lib/auth'
+import { getApiErrorMessage } from '@/lib/utils'
 import { Eye, EyeOff, Dumbbell } from 'lucide-react'
 
 const schema = z.object({
@@ -31,8 +32,8 @@ export default function LoginPage() {
       await saveAuthData(response)
       toast.success(`Bienvenid@, ${response.user_name}`)
       router.push(response.user_role === 'superadmin' ? '/superadmin' : '/admin/dashboard')
-    } catch (e: any) {
-      toast.error(e?.response?.data?.detail || 'Credenciales incorrectas')
+    } catch (e) {
+      toast.error(getApiErrorMessage(e, 'Credenciales incorrectas'))
     } finally {
       setLoading(false)
     }

@@ -1,6 +1,7 @@
 'use client'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { getStoredUser, logout } from '@/lib/auth'
 import { Shield, Building2, LogOut } from 'lucide-react'
 
@@ -38,13 +39,13 @@ export default function SuperadminLayout({ children }: { children: React.ReactNo
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-4 space-y-1">
-          <a
+          <Link
             href="/superadmin/tenants"
             className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
           >
             <Building2 className="w-4 h-4" />
             Tenants
-          </a>
+          </Link>
         </nav>
 
         {/* Footer */}

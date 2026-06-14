@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cobros as cobrosApi, apiClient } from '@/lib/api';
 import type { CobrosClient, DebtDetail } from '@/types';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { RefreshCw, CalendarX, Users, CheckCircle, X } from 'lucide-react';

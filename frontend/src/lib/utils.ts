@@ -8,6 +8,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ─── Errores de API ─────────────────────────────────────────────────────────
+
+/**
+ * Extrae un mensaje legible del error de una respuesta de la API (axios).
+ * Maneja el caso común `{ detail: string }` y los errores de validación de
+ * FastAPI `{ detail: [{ msg, loc }] }`. Devuelve `fallback` si no hay detalle.
+ */
+export function getApiErrorMessage(error: unknown, fallback = 'Ocurrió un error'): string {
+  const detail = (error as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  if (Array.isArray(detail) && detail.length > 0) {
+    const first = detail[0]
+    if (first && typeof first === 'object' && typeof (first as { msg?: unknown }).msg === 'string') {
+      return (first as { msg: string }).msg
+    }
+  }
+  return fallback
+}
+
 const BOGOTA_TZ = 'America/Bogota'
 
 // ─── Moneda ───────────────────────────────────────────────────────────────────

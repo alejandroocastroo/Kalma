@@ -1,5 +1,4 @@
 'use client'
-import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -9,6 +8,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { superadminApi } from '@/lib/superadmin-api'
+import { getApiErrorMessage } from '@/lib/utils'
 
 const CURRENCY_OPTIONS = [
   { value: 'COP', label: 'COP — Peso colombiano', example: '$150.000' },
@@ -43,7 +43,7 @@ interface Props {
 export function CreateTenantModal({ open, onClose }: Props) {
   const qc = useQueryClient()
 
-  const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: { plan: 'basic', currency: 'COP' },
   })
@@ -56,10 +56,7 @@ export function CreateTenantModal({ open, onClose }: Props) {
       reset()
       onClose()
     },
-    onError: (err: any) => {
-      const detail = err?.response?.data?.detail
-      toast.error(typeof detail === 'string' ? detail : 'Error al crear el tenant')
-    },
+    onError: (err) => toast.error(getApiErrorMessage(err, 'Error al crear el tenant')),
   })
 
   // Auto-generate slug from name
