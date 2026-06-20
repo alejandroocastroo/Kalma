@@ -15,6 +15,7 @@ from app.models.tenant import Tenant
 from app.models.user import User
 from app.models.class_type import ClassType
 from app.models.class_session import ClassSession
+from app.models.instructor import Instructor
 from app.models.client import Client
 from app.models.appointment import Appointment
 from app.models.payment import Payment
@@ -79,6 +80,20 @@ async def seed():
             role="instructor",
         )
         db.add_all([admin, instructora])
+        await db.flush()
+
+        print("Creando instructor...")
+        # La FK de class_sessions.instructor_id apunta a la tabla `instructors`,
+        # que es independiente de `users`. Creamos el registro correspondiente.
+        instructor_record = Instructor(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            full_name="Sofía Rodríguez",
+            email="instructora@mantra.com",
+            phone="+573009876543",
+            is_active=True,
+        )
+        db.add(instructor_record)
         await db.flush()
 
         print("Creando tipos de clase...")
@@ -149,7 +164,7 @@ async def seed():
                 id=uuid.uuid4(),
                 tenant_id=tenant.id,
                 class_type_id=class_type.id,
-                instructor_id=instructor.id,
+                instructor_id=instructor_record.id,
                 start_datetime=start,
                 end_datetime=end,
                 capacity=class_type.capacity,

@@ -16,6 +16,7 @@ class Client(Base, TimestampMixin):
     full_name: Mapped[str] = mapped_column(String(200), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    address: Mapped[str | None] = mapped_column(String(500), nullable=True)
     document_type: Mapped[str] = mapped_column(String(10), default="CC")
     document_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
     birth_date: Mapped[date | None] = mapped_column(Date, nullable=True)

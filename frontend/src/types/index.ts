@@ -78,6 +78,7 @@ export interface Client {
   document_type: string
   document_number?: string
   birth_date?: string
+  address?: string
   emergency_contact_name?: string
   emergency_contact_phone?: string
   notes?: string | null

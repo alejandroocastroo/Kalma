@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getInitials, formatDate, formatTime, appointmentStatusConfig } from '@/lib/utils'
-import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client } from '@/types'
 
@@ -182,6 +182,13 @@ export default function ClientesPage() {
                   <div className="flex items-center gap-2 text-gray-600">
                     <Cake className="w-4 h-4 text-gray-400" />
                     <span>{formatBirthDate(selected.birth_date)}</span>
+                  </div>
+                )}
+
+                {selected.address && (
+                  <div className="flex items-center gap-2 text-gray-600">
+                    <MapPin className="w-4 h-4 text-gray-400" />
+                    <span>{selected.address}</span>
                   </div>
                 )}
               </div>
@@ -395,6 +402,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
     document_type: initial?.document_type || 'CC',
     document_number: initial?.document_number || '',
     birth_date: initial?.birth_date || '',
+    address: initial?.address || '',
     notes: initial?.notes || '',
     is_active: initial?.is_active ?? true,
   })
@@ -405,6 +413,7 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
   const buildPayload = () => ({
     ...form,
     birth_date: form.birth_date || undefined,
+    address: form.address || undefined,
     notes: form.notes || null,
   })
 
@@ -515,6 +524,10 @@ function ClientForm({ onClose, initial, clientId }: { onClose: () => void; initi
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Fecha de nacimiento <span className="text-gray-400 font-normal">(opcional)</span></label>
           <Input type="date" value={form.birth_date} onChange={f('birth_date')} />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Dirección <span className="text-gray-400 font-normal">(opcional)</span></label>
+          <Input placeholder="Cra. 34 #16-6, Tuluá" value={form.address} onChange={f('address')} />
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones <span className="text-gray-400 font-normal">(lesiones, cirugías, restricciones)</span></label>

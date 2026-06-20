@@ -27,6 +27,8 @@ psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/create_instructors_ta
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_hybrid_memberships.sql
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_preferred_schedule.sql
 psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_tenant_currency.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_custom_categories.sql
+psql -h "$PG_HOST" -U "$PG_USER" -d "$PG_DB" -f migrations/add_client_address.sql
 set -e
 
 if [ "${ENVIRONMENT}" = "development" ]; then

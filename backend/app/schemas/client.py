@@ -32,6 +32,7 @@ class ClientCreate(_ClientDocMixin):
     phone: Optional[str] = None
     document_type: str = "CC"
     birth_date: Optional[date] = None
+    address: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     notes: Optional[str] = None
@@ -41,6 +42,7 @@ class ClientUpdate(_ClientDocMixin):
     full_name: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
+    address: Optional[str] = None
     document_type: Optional[str] = None
     birth_date: Optional[date] = None
     emergency_contact_name: Optional[str] = None
@@ -58,6 +60,7 @@ class ClientResponse(BaseModel):
     document_type: str
     document_number: Optional[str] = None
     birth_date: Optional[date] = None
+    address: Optional[str] = None
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
     notes: Optional[str] = None
