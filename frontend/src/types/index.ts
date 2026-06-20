@@ -184,6 +184,7 @@ export interface TokenResponse {
   tenant_id?: string
   tenant_slug?: string
   tenant_currency?: string
+  tenant_timezone?: string
 }
 
 export interface LoginRequest {

@@ -24,3 +24,4 @@ class TokenResponse(BaseModel):
     tenant_id: Optional[str] = None
     tenant_slug: Optional[str] = None
     tenant_currency: Optional[str] = None
+    tenant_timezone: Optional[str] = None

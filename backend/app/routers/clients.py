@@ -191,9 +191,9 @@ async def client_appointments(
     from app.models.class_session import ClassSession
     from app.models.class_type import ClassType
     from app.models.space import Space
-    from datetime import timezone, timedelta
+    from app.utils.timezone import get_tenant_zoneinfo
 
-    BOGOTA_TZ = timezone(timedelta(hours=-5))
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
     result = await db.execute(
         select(Appointment)
@@ -224,9 +224,9 @@ async def client_appointments(
                 space_name = space.name if space else None
                 if not ct_name:
                     ct_name = space_name
-            # Convertir UTC → Bogotá para mostrar hora local
+            # Convertir UTC → hora local del tenant para mostrar
             if session.start_datetime:
-                local_dt = session.start_datetime.astimezone(BOGOTA_TZ)
+                local_dt = session.start_datetime.astimezone(tz)
                 session_start_local = local_dt.strftime("%Y-%m-%dT%H:%M:%S")
         enriched.append({
             "id": str(appt.id),

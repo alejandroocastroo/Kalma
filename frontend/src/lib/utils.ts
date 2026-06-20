@@ -3,12 +3,11 @@ import { twMerge } from 'tailwind-merge'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { toZonedTime } from 'date-fns-tz'
+import { getTenantTimezone } from '@/lib/auth'
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
-
-const BOGOTA_TZ = 'America/Bogota'
 
 // ─── Moneda ───────────────────────────────────────────────────────────────────
 
@@ -60,7 +59,7 @@ export function formatCOP(amount: number | string): string {
 export function formatDate(dateStr: string): string {
   try {
     const date = parseISO(dateStr)
-    const bogota = toZonedTime(date, BOGOTA_TZ)
+    const bogota = toZonedTime(date, getTenantTimezone())
     return format(bogota, "d 'de' MMMM, yyyy", { locale: es })
   } catch {
     return dateStr
@@ -70,7 +69,7 @@ export function formatDate(dateStr: string): string {
 export function formatTime(dateStr: string): string {
   try {
     const date = parseISO(dateStr)
-    const bogota = toZonedTime(date, BOGOTA_TZ)
+    const bogota = toZonedTime(date, getTenantTimezone())
     return format(bogota, 'h:mm a', { locale: es })
   } catch {
     return dateStr
@@ -80,7 +79,7 @@ export function formatTime(dateStr: string): string {
 export function formatDateTime(dateStr: string): string {
   try {
     const date = parseISO(dateStr)
-    const bogota = toZonedTime(date, BOGOTA_TZ)
+    const bogota = toZonedTime(date, getTenantTimezone())
     return format(bogota, "EEE d MMM, h:mm a", { locale: es })
   } catch {
     return dateStr
@@ -90,7 +89,7 @@ export function formatDateTime(dateStr: string): string {
 export function formatShortDate(dateStr: string): string {
   try {
     const date = parseISO(dateStr)
-    const bogota = toZonedTime(date, BOGOTA_TZ)
+    const bogota = toZonedTime(date, getTenantTimezone())
     return format(bogota, "d MMM", { locale: es })
   } catch {
     return dateStr
@@ -109,7 +108,7 @@ export function getInitials(name: string): string {
 export function getDayOfWeek(dateStr: string): string {
   try {
     const date = parseISO(dateStr)
-    const bogota = toZonedTime(date, BOGOTA_TZ)
+    const bogota = toZonedTime(date, getTenantTimezone())
     return format(bogota, 'EEEE', { locale: es })
   } catch {
     return ''

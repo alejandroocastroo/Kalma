@@ -45,6 +45,7 @@ async def create_tenant(
         slug=body.tenant_slug,
         plan=body.plan,
         currency=body.currency,
+        timezone=body.timezone,
         is_active=True,
         city="Bogotá",
         created_at=now,
@@ -93,6 +94,27 @@ async def update_tenant_currency(
     if not tenant:
         raise HTTPException(404, "Tenant no encontrado")
     tenant.currency = currency
+    tenant.updated_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(tenant)
+    return tenant
+
+
+@router.patch("/tenants/{tenant_id}/timezone", response_model=TenantResponse)
+async def update_tenant_timezone(
+    tenant_id: str,
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(require_superadmin),
+):
+    from app.utils.timezone import is_valid_timezone
+    tz = str(body.get("timezone", "")).strip()
+    if not is_valid_timezone(tz):
+        raise HTTPException(400, f"Zona horaria '{tz}' no válida (debe ser una zona IANA, ej. America/Mexico_City)")
+    tenant = await db.get(Tenant, uuid.UUID(tenant_id))
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    tenant.timezone = tz
     tenant.updated_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(tenant)

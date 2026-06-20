@@ -23,14 +23,12 @@ from app.schemas.schedule import (
     GenerateSessionsRequest,
     GenerateSessionsResponse,
 )
+from app.utils.timezone import get_tenant_zoneinfo
 
 router = APIRouter(prefix="/schedule", tags=["Horario del Estudio"])
 
 _DEFAULT_OPEN_HOUR = 6
 _DEFAULT_CLOSE_HOUR = 21
-
-# Colombia is permanently UTC-5 (no DST since 1993)
-_BOGOTA_UTC_OFFSET = 5
 
 
 def _require_tenant(current_user) -> None:
@@ -244,6 +242,9 @@ async def generate_sessions(
 
     tenant_id = current_user.tenant_id
 
+    # Zona horaria del tenant: open_hour/close_hour son hora local del estudio.
+    tz = await get_tenant_zoneinfo(db, tenant_id)
+
     open_hour = body.open_hour if body.open_hour is not None else _DEFAULT_OPEN_HOUR
     close_hour = body.close_hour if body.close_hour is not None else _DEFAULT_CLOSE_HOUR
 
@@ -255,19 +256,18 @@ async def generate_sessions(
     resolved_capacity = space.capacity
 
     # 2. Pre-load existing sessions to skip duplicates.
-    #    Since sessions are stored in UTC but our keys use Bogotá local
-    #    (date + local_hour), extend the query window by the UTC offset
-    #    so we don't miss evening sessions stored on the next UTC day.
-    bogota_offset = timedelta(hours=_BOGOTA_UTC_OFFSET)
+    #    Sessions are stored in UTC; nuestras claves usan la hora local del tenant
+    #    (date + local_hour). Convertimos medianoche local del rango a UTC para no
+    #    perder sesiones nocturnas guardadas en el día UTC siguiente.
     range_start_utc = datetime(
         body.from_date.year, body.from_date.month, body.from_date.day,
-        0, 0, 0, tzinfo=timezone.utc,
-    ) + bogota_offset  # midnight Bogotá = 05:00 UTC
+        0, 0, 0, tzinfo=tz,
+    ).astimezone(timezone.utc)
 
     range_end_utc = datetime(
         body.to_date.year, body.to_date.month, body.to_date.day,
-        23, 59, 59, tzinfo=timezone.utc,
-    ) + bogota_offset  # 23:59 Bogotá = 04:59 UTC next day
+        23, 59, 59, tzinfo=tz,
+    ).astimezone(timezone.utc)
 
     sessions_result = await db.execute(
         select(ClassSession).where(
@@ -277,10 +277,10 @@ async def generate_sessions(
             ClassSession.start_datetime <= range_end_utc,
         )
     )
-    # Index by (local Bogotá date, local Bogotá hour, space_id)
+    # Index by (local tenant date, local tenant hour, space_id)
     existing_sessions: set[tuple] = set()
     for s in sessions_result.scalars().all():
-        local_dt = s.start_datetime - bogota_offset
+        local_dt = s.start_datetime.astimezone(tz)
         existing_sessions.add((local_dt.date(), local_dt.hour, s.space_id))
 
     # 3. Iterate every day in the range and create one session per hour slot
@@ -309,12 +309,12 @@ async def generate_sessions(
                 skipped += 1
                 continue
 
-            # Convert Bogotá local time → UTC for storage
-            # UTC = Bogotá + 5h  (Colombia is permanently UTC-5)
+            # Convert tenant local time → UTC for storage.
+            # La hora de pared `hour` se interpreta en la zona del tenant (DST-aware).
             start_dt = datetime(
                 current_date.year, current_date.month, current_date.day,
-                0, 0, 0, tzinfo=timezone.utc,
-            ) + timedelta(hours=hour + _BOGOTA_UTC_OFFSET)
+                hour, 0, 0, tzinfo=tz,
+            ).astimezone(timezone.utc)
             end_dt = start_dt + timedelta(hours=1)
 
             session = ClassSession(
@@ -427,17 +427,17 @@ async def get_holiday_conflicts(
     if not holiday_list:
         return []
 
-    bogota_offset = timedelta(hours=_BOGOTA_UTC_OFFSET)
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
     result = []
 
     for hol_date, hol_name in holiday_list:
-        # Bogotá midnight → UTC window for the full day
+        # Tenant-local midnight → UTC window for the full day
         day_start_utc = datetime(
-            hol_date.year, hol_date.month, hol_date.day, 0, 0, 0, tzinfo=timezone.utc
-        ) + bogota_offset
+            hol_date.year, hol_date.month, hol_date.day, 0, 0, 0, tzinfo=tz
+        ).astimezone(timezone.utc)
         day_end_utc = datetime(
-            hol_date.year, hol_date.month, hol_date.day, 23, 59, 59, tzinfo=timezone.utc
-        ) + bogota_offset
+            hol_date.year, hol_date.month, hol_date.day, 23, 59, 59, tzinfo=tz
+        ).astimezone(timezone.utc)
 
         sessions_result = await db.execute(
             select(ClassSession).where(

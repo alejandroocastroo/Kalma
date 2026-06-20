@@ -1,6 +1,5 @@
 from calendar import monthrange
 from datetime import datetime, date, timedelta, timezone
-BOGOTA_TZ = timezone(timedelta(hours=-5))
 from typing import Optional, List
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,6 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
+from app.utils.timezone import get_tenant_zoneinfo
 from app.models.client_membership import ClientMembership
 from app.models.plan import Plan
 from app.models.client import Client
@@ -848,8 +848,10 @@ async def auto_book_membership(
     result = await db.execute(q)
     sessions = result.scalars().all()
 
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+
     def _matches(s: ClassSession) -> bool:
-        local = s.start_datetime.astimezone(BOGOTA_TZ)
+        local = s.start_datetime.astimezone(tz)
         for (sid, wd, hr) in schedule_entries:
             if local.weekday() == wd and local.hour == hr:
                 if sid is None or str(s.space_id) == sid:

@@ -11,6 +11,8 @@ import {
   eachDayOfInterval, isWithinInterval, isSameDay, getDay, addMonths,
   parseISO, isSameMonth,
 } from 'date-fns'
+import { toZonedTime } from 'date-fns-tz'
+import { getTenantTimezone } from '@/lib/auth'
 import { es } from 'date-fns/locale'
 import type { GenerateSessionsResult } from '@/types'
 
@@ -467,9 +469,9 @@ type ConflictSession = {
 type HolidayConflict = { date: string; holiday_name: string; sessions: ConflictSession[] }
 
 function bogotaTimeStr(utcIso: string): string {
-  const dt = new Date(utcIso)
-  const h = ((dt.getUTCHours() - 5) + 24) % 24
-  return h.toString().padStart(2, '0') + ':00'
+  // Hora local del tenant (no Bogotá fija): UTC → zona del estudio.
+  const local = toZonedTime(parseISO(utcIso), getTenantTimezone())
+  return local.getHours().toString().padStart(2, '0') + ':00'
 }
 
 function HolidayConflictsSection() {

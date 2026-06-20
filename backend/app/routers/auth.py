@@ -38,11 +38,13 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
     tenant_slug = None
     tenant_currency = "COP"
+    tenant_timezone = "America/Bogota"
     if user.tenant_id:
         t = await db.get(Tenant, user.tenant_id)
         if t:
             tenant_slug = t.slug
             tenant_currency = t.currency or "COP"
+            tenant_timezone = t.timezone or "America/Bogota"
 
     return TokenResponse(
         access_token=access_token,
@@ -54,6 +56,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
         tenant_id=str(user.tenant_id) if user.tenant_id else None,
         tenant_slug=tenant_slug,
         tenant_currency=tenant_currency,
+        tenant_timezone=tenant_timezone,
     )
 
 
@@ -91,11 +94,13 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
 
     tenant_slug = None
     tenant_currency = "COP"
+    tenant_timezone = "America/Bogota"
     if user.tenant_id:
         t = await db.get(Tenant, user.tenant_id)
         if t:
             tenant_slug = t.slug
             tenant_currency = t.currency or "COP"
+            tenant_timezone = t.timezone or "America/Bogota"
 
     return TokenResponse(
         access_token=access_token,
@@ -107,6 +112,7 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
         tenant_id=str(user.tenant_id) if user.tenant_id else None,
         tenant_slug=tenant_slug,
         tenant_currency=tenant_currency,
+        tenant_timezone=tenant_timezone,
     )
 
 
@@ -128,10 +134,12 @@ async def logout(body: RefreshRequest):
 async def me(db: AsyncSession = Depends(get_db), current_user=Depends(get_current_active_user)):
     from app.models.tenant import Tenant
     tenant_currency = "COP"
+    tenant_timezone = "America/Bogota"
     if current_user.tenant_id:
         t = await db.get(Tenant, current_user.tenant_id)
         if t:
             tenant_currency = t.currency or "COP"
+            tenant_timezone = t.timezone or "America/Bogota"
     return {
         "id": str(current_user.id),
         "email": current_user.email,
@@ -139,6 +147,7 @@ async def me(db: AsyncSession = Depends(get_db), current_user=Depends(get_curren
         "role": current_user.role,
         "tenant_id": str(current_user.tenant_id) if current_user.tenant_id else None,
         "tenant_currency": tenant_currency,
+        "tenant_timezone": tenant_timezone,
     }
 
 

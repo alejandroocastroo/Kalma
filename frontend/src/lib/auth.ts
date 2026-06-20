@@ -7,6 +7,7 @@ const REFRESH_KEY = 'kalma_refresh_token'
 const USER_KEY = 'kalma_user'
 const TENANT_KEY = 'kalma_tenant_slug'
 const CURRENCY_KEY = 'kalma_tenant_currency'
+const TIMEZONE_KEY = 'kalma_tenant_timezone'
 
 export const getToken = (): string | null => {
   if (typeof window === 'undefined') return null
@@ -39,6 +40,16 @@ export const getTenantCurrency = (): string => {
 
 export const setTenantCurrency = (currency: string) => localStorage.setItem(CURRENCY_KEY, currency)
 export const removeTenantCurrency = () => localStorage.removeItem(CURRENCY_KEY)
+
+// Zona horaria IANA del tenant (ej. "America/Bogota", "America/Mexico_City").
+// Default Bogotá para no romper a los tenants colombianos existentes.
+export const getTenantTimezone = (): string => {
+  if (typeof window === 'undefined') return 'America/Bogota'
+  return localStorage.getItem(TIMEZONE_KEY) || 'America/Bogota'
+}
+
+export const setTenantTimezone = (tz: string) => localStorage.setItem(TIMEZONE_KEY, tz)
+export const removeTenantTimezone = () => localStorage.removeItem(TIMEZONE_KEY)
 
 export const getStoredUser = (): Partial<User> | null => {
   if (typeof window === 'undefined') return null
@@ -80,6 +91,7 @@ export const saveAuthData = async (data: TokenResponse) => {
   setRefreshToken(data.refresh_token)
   if (data.tenant_slug) setTenantSlug(data.tenant_slug)
   if (data.tenant_currency) setTenantCurrency(data.tenant_currency)
+  if (data.tenant_timezone) setTenantTimezone(data.tenant_timezone)
   setStoredUser({
     id: data.user_id,
     email: data.user_email,
@@ -107,6 +119,7 @@ export const logout = () => {
   removeRefreshToken()
   removeTenantSlug()
   removeTenantCurrency()
+  removeTenantTimezone()
   removeStoredUser()
   clearSessionCookie()
   window.location.href = '/login'

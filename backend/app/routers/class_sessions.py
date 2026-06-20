@@ -21,6 +21,7 @@ from app.models.class_session import ClassSession
 from app.models.class_type import ClassType
 from app.models.space import Space
 from app.models.appointment import Appointment
+from app.utils.timezone import get_tenant_zoneinfo
 from app.models.client import Client
 from app.models.instructor import Instructor
 from app.models.client_membership import ClientMembership
@@ -82,7 +83,7 @@ async def check_schedule_availability(
     Retorna cuántas sesiones se encontraron y las primeras fechas para contexto.
     """
     from datetime import date as date_type
-    BOGOTA_TZ = timezone(timedelta(hours=-5))
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
     try:
         sd = date_type.fromisoformat(body.start_date)
@@ -117,7 +118,7 @@ async def check_schedule_availability(
 
     matching_dates: list[str] = []
     for s in sessions:
-        local = s.start_datetime.astimezone(BOGOTA_TZ)
+        local = s.start_datetime.astimezone(tz)
         key_with_space = (local.weekday(), local.hour, str(s.space_id) if s.space_id else None)
         key_no_space = (local.weekday(), local.hour, None)
         if key_with_space in schedule_set or key_no_space in schedule_set:
@@ -148,13 +149,13 @@ async def sessions_coverage(
     )).all()
 
     result = []
-    BOGOTA_TZ = timezone(timedelta(hours=-5))
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
     for row in rows:
         space_name = None
         if row.space_id:
             space = await db.get(Space, row.space_id)
             space_name = space.name if space else None
-        last_local = row.last_date.astimezone(BOGOTA_TZ).strftime("%d %b %Y") if row.last_date else None
+        last_local = row.last_date.astimezone(tz).strftime("%d %b %Y") if row.last_date else None
         result.append({
             "space_id": str(row.space_id) if row.space_id else None,
             "space_name": space_name or "General",

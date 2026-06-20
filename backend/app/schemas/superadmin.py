@@ -4,6 +4,8 @@ from datetime import datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, field_validator
 
+from app.utils.timezone import is_valid_timezone
+
 
 _VALID_CURRENCIES = {"COP", "MXN", "USD", "EUR", "ARS", "PEN", "CLP"}
 
@@ -13,6 +15,7 @@ class SuperadminTenantCreate(BaseModel):
     tenant_slug: str
     plan: str = "basic"
     currency: str = "COP"
+    timezone: str = "America/Bogota"
     admin_full_name: str
     admin_email: EmailStr
     admin_password: str
@@ -23,6 +26,14 @@ class SuperadminTenantCreate(BaseModel):
         v = v.upper()
         if v not in _VALID_CURRENCIES:
             raise ValueError(f"Moneda no soportada. Opciones: {', '.join(sorted(_VALID_CURRENCIES))}")
+        return v
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_timezone(cls, v: str) -> str:
+        v = v.strip()
+        if not is_valid_timezone(v):
+            raise ValueError(f"Zona horaria '{v}' no válida (debe ser una zona IANA, ej. America/Mexico_City)")
         return v
 
     @field_validator("tenant_slug")
@@ -47,6 +58,7 @@ class TenantResponse(BaseModel):
     slug: str
     plan: str
     currency: str = "COP"
+    timezone: str = "America/Bogota"
     is_active: bool
     email: Optional[str] = None
     phone: Optional[str] = None

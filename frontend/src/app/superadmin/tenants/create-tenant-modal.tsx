@@ -9,6 +9,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { superadminApi } from '@/lib/superadmin-api'
+import { TIMEZONE_OPTIONS } from '@/lib/timezones'
 
 const CURRENCY_OPTIONS = [
   { value: 'COP', label: 'COP — Peso colombiano', example: '$150.000' },
@@ -28,6 +29,7 @@ const schema = z.object({
     .regex(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/, 'Solo minúsculas, números y guiones'),
   plan: z.enum(['basic', 'pro', 'enterprise']),
   currency: z.string().min(3).max(3),
+  timezone: z.string().min(1, 'Selecciona una zona horaria'),
   admin_full_name: z.string().min(2, 'Mínimo 2 caracteres'),
   admin_email: z.string().email('Email inválido'),
   admin_password: z.string().min(8, 'Mínimo 8 caracteres'),
@@ -45,7 +47,7 @@ export function CreateTenantModal({ open, onClose }: Props) {
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
-    defaultValues: { plan: 'basic', currency: 'COP' },
+    defaultValues: { plan: 'basic', currency: 'COP', timezone: 'America/Bogota' },
   })
 
   const mutation = useMutation({
@@ -124,6 +126,20 @@ export function CreateTenantModal({ open, onClose }: Props) {
                   </option>
                 ))}
               </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Zona horaria *</label>
+              <select
+                {...register('timezone')}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {TIMEZONE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">Define la hora local del estudio en la agenda y las clases.</p>
             </div>
           </div>
 

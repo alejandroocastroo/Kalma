@@ -24,6 +24,7 @@ class Tenant(Base, TimestampMixin):
     whatsapp_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     plan: Mapped[str] = mapped_column(String(20), default="basic")
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="COP")
+    timezone: Mapped[str] = mapped_column(String(50), nullable=False, default="America/Bogota")
     custom_categories: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # {"income": ["Yoga especial", "Taller"], "expense": ["Cafetería"]}
     hidden_categories: Mapped[dict | None] = mapped_column(JSONB, nullable=True)

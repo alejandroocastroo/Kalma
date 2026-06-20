@@ -9,8 +9,10 @@ import { Badge } from '@/components/ui/badge'
 import { formatDateTime, appointmentStatusConfig } from '@/lib/utils'
 import { ChevronLeft, ChevronRight, Plus, X, Users, Check, UserX, UserPlus, Pencil, AlertCircle } from 'lucide-react'
 import { format, addWeeks, subWeeks, startOfWeek, addDays, isSameDay, parseISO } from 'date-fns'
+import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
+import { getTenantTimezone } from '@/lib/auth'
 import type { ClassSession, Client as ClientType, Instructor } from '@/types'
 
 // ClassSession may carry space_id from the backend even if not yet in the shared type
@@ -37,6 +39,23 @@ function pad(n: number) {
 function buildISO(date: string, hour: number) {
   // date is "yyyy-MM-dd", hour is 0–23
   return `${date}T${pad(hour)}:00:00`
+}
+
+// Interpreta una hora de pared ("yyyy-MM-ddTHH:mm[:ss]") en la zona horaria del
+// tenant y devuelve el instante UTC correspondiente. Independiente de la zona del
+// navegador, así una clase de las 7:00 en México queda guardada como 13:00 UTC.
+function wallTimeToUtc(naive: string): Date {
+  return fromZonedTime(naive, getTenantTimezone())
+}
+
+// Hora local (0–23) de un instante UTC, vista en la zona del tenant.
+function tenantHour(utcIso: string): number {
+  return toZonedTime(parseISO(utcIso), getTenantTimezone()).getHours()
+}
+
+// ¿El instante UTC cae, en hora del tenant, en el mismo día calendario que `day`?
+function isSameTenantDay(utcIso: string, day: Date): boolean {
+  return isSameDay(toZonedTime(parseISO(utcIso), getTenantTimezone()), day)
 }
 
 // ─── QuickBookModal ───────────────────────────────────────────────────────────
@@ -120,10 +139,11 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
       const effectiveDuration = selectedClassType?.duration_minutes ?? duration
 
       if (tab === 'hour') {
-        startISO = new Date(buildISO(initialDate, selectedHour)).toISOString()
-        endISO = new Date(new Date(buildISO(initialDate, selectedHour)).getTime() + effectiveDuration * 60000).toISOString()
+        const startDate = wallTimeToUtc(buildISO(initialDate, selectedHour))
+        startISO = startDate.toISOString()
+        endISO = new Date(startDate.getTime() + effectiveDuration * 60000).toISOString()
       } else {
-        const startDate = new Date(specificDatetime)
+        const startDate = wallTimeToUtc(specificDatetime)
         startISO = startDate.toISOString()
         endISO = new Date(startDate.getTime() + effectiveDuration * 60000).toISOString()
       }
@@ -526,7 +546,7 @@ function CreateSessionForm({ onClose }: { onClose: () => void }) {
     setLoading(true)
     try {
       const durationMin = selectedClassType?.duration_minutes ?? (durationMode === 'fixed' ? 60 : customDuration)
-      const start = new Date(buildISO(date, selectedHour))
+      const start = wallTimeToUtc(buildISO(date, selectedHour))
       const end = new Date(start.getTime() + durationMin * 60000)
 
       await classSessions.create({
@@ -948,7 +968,7 @@ export default function AgendaPage() {
   }
 
   const getSessionsForDay = (day: Date) =>
-    filteredSessions.filter((s) => isSameDay(parseISO(s.start_datetime), day))
+    filteredSessions.filter((s) => isSameTenantDay(s.start_datetime, day))
 
   return (
     <div className="space-y-4">
@@ -1078,7 +1098,7 @@ export default function AgendaPage() {
               </div>
               {weekDays.map((day) => {
                 const daySessions = getSessionsForDay(day).filter((s) => {
-                  const sessionHour = parseISO(s.start_datetime).getHours()
+                  const sessionHour = tenantHour(s.start_datetime)
                   return sessionHour === hour
                 })
                 return (
