@@ -90,7 +90,7 @@ async def check_schedule_availability(
     except ValueError:
         raise HTTPException(400, "start_date inválido")
 
-    start_dt = datetime(sd.year, sd.month, sd.day, tzinfo=timezone.utc)
+    start_dt = datetime(sd.year, sd.month, sd.day, tzinfo=tz).astimezone(timezone.utc)
     end_dt = start_dt + timedelta(weeks=body.weeks_ahead)
 
     # Espacios involucrados en el schedule
@@ -175,8 +175,10 @@ async def list_sessions(
         raise HTTPException(403, "Sin tenant")
     q = select(ClassSession).where(ClassSession.tenant_id == current_user.tenant_id)
     if not start and not end:
-        now = datetime.now(timezone.utc)
-        week_start = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+        tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+        today_local = datetime.now(tz).date()
+        monday = today_local - timedelta(days=today_local.weekday())
+        week_start = datetime(monday.year, monday.month, monday.day, tzinfo=tz).astimezone(timezone.utc)
         week_end = week_start + timedelta(days=7)
         q = q.where(ClassSession.start_datetime >= week_start, ClassSession.start_datetime < week_end)
     else:
@@ -198,9 +200,10 @@ async def week_sessions(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    now = datetime.now(timezone.utc)
-    week_start = now - timedelta(days=now.weekday())
-    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    today_local = datetime.now(tz).date()
+    monday = today_local - timedelta(days=today_local.weekday())
+    week_start = datetime(monday.year, monday.month, monday.day, tzinfo=tz).astimezone(timezone.utc)
     week_end = week_start + timedelta(days=7)
 
     result = await db.execute(

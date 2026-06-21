@@ -21,6 +21,7 @@ from app.models.payment import Payment
 from app.models.client import Client
 from app.models.space import Space
 from app.models.tenant import Tenant
+from app.utils.timezone import get_zoneinfo
 
 router = APIRouter(prefix="/export", tags=["Exportar"])
 
@@ -128,7 +129,7 @@ def _derive_space_columns(payments: list[Payment], space_names: dict) -> list[st
     return cols or ["General"]
 
 
-def _build_resumen(ws, payments: list[Payment], tenant_name: str, start: str, end: str, space_names: dict):
+def _build_resumen(ws, payments: list[Payment], tenant_name: str, start: str, end: str, space_names: dict, generated_at: str = ""):
     """Hoja 1: Resumen Ejecutivo — Estado de resultados del período."""
     ws.freeze_panes = "A6"
 
@@ -148,7 +149,7 @@ def _build_resumen(ws, payments: list[Payment], tenant_name: str, start: str, en
     ws["A2"].alignment = _align("center")
 
     ws.merge_cells(f"A3:{last_col}3")
-    ws["A3"] = f"Generado el {datetime.now().strftime('%d/%m/%Y %H:%M')}"
+    ws["A3"] = f"Generado el {generated_at}"
     ws["A3"].font = _font(9, color="888888")
     ws["A3"].alignment = _align("center")
 
@@ -493,6 +494,8 @@ async def export_contabilidad(
 
     tenant = await db.get(Tenant, current_user.tenant_id)
     tenant_name = tenant.name if tenant else "Estudio"
+    tz = get_zoneinfo(tenant.timezone if tenant else None)
+    generated_at = datetime.now(tz).strftime('%d/%m/%Y %H:%M')
 
     wb = openpyxl.Workbook()
     ws_resumen = wb.active
@@ -502,7 +505,7 @@ async def export_contabilidad(
     ws_kpis = wb.create_sheet("KPIs del Período")
     ws_espacios = wb.create_sheet("Por Espacio")
 
-    _build_resumen(ws_resumen, payments_list, tenant_name, start or "—", end or "—", space_names)
+    _build_resumen(ws_resumen, payments_list, tenant_name, start or "—", end or "—", space_names, generated_at)
     _build_detalle(ws_ingresos, payments_list, "income", client_names, space_names)
     _build_detalle(ws_egresos, payments_list, "expense", client_names, space_names, instructor_names)
     _build_kpis(ws_kpis, payments_list, space_names)

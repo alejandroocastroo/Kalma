@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.database import get_db
 from app.limiter import limiter
+from app.utils.timezone import get_zoneinfo
 from app.models.tenant import Tenant
 from app.models.class_type import ClassType
 from app.models.class_session import ClassSession
@@ -121,9 +122,11 @@ async def public_schedule(
                     space_id_filter = sp.id
                     break
 
-    now = datetime.now(timezone.utc)
-    week_start = now - timedelta(days=now.weekday())
-    week_start = week_start.replace(hour=0, minute=0, second=0, microsecond=0)
+    # Semana local del tenant (lunes 00:00 local → UTC), no la semana UTC.
+    tz = get_zoneinfo(tenant.timezone)
+    today_local = datetime.now(tz).date()
+    monday_local = today_local - timedelta(days=today_local.weekday())
+    week_start = datetime(monday_local.year, monday_local.month, monday_local.day, tzinfo=tz).astimezone(timezone.utc)
     week_end = week_start + timedelta(days=7)
 
     if start:
@@ -152,6 +155,10 @@ async def public_schedule(
             "id": str(s.id),
             "start_datetime": s.start_datetime.isoformat(),
             "end_datetime": s.end_datetime.isoformat(),
+            # Hora de pared en la zona del estudio (naive). El frontend público no
+            # está logueado, así que recibe la hora local ya resuelta por el backend.
+            "start_local": s.start_datetime.astimezone(tz).replace(tzinfo=None).isoformat(),
+            "end_local": s.end_datetime.astimezone(tz).replace(tzinfo=None).isoformat(),
             "capacity": s.capacity,
             "available_spots": max(0, s.capacity - s.enrolled_count),
             "enrolled_count": s.enrolled_count,

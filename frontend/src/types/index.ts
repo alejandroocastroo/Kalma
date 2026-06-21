@@ -205,6 +205,8 @@ export interface PublicSession {
   id: string
   start_datetime: string
   end_datetime: string
+  start_local?: string
+  end_local?: string
   capacity: number
   available_spots: number
   enrolled_count: number

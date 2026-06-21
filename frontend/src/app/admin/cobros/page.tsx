@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cobros as cobrosApi, apiClient } from '@/lib/api';
+import { formatInTenantTz } from '@/lib/utils';
 import type { CobrosClient, DebtDetail } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -120,8 +121,8 @@ export default function CobrosPage() {
   function formatDebtDetail(detail: DebtDetail): string {
     const space = detail.space_name || 'Sin espacio';
     if (!detail.start_datetime) return space;
-    const time = format(new Date(detail.start_datetime), 'h:mm aa', { locale: es });
-    const day = format(new Date(detail.start_datetime), "d 'de' MMM", { locale: es });
+    const time = formatInTenantTz(detail.start_datetime, 'h:mm aa');
+    const day = formatInTenantTz(detail.start_datetime, "d 'de' MMM");
     return `${space} · ${day} · ${time}`;
   }
 

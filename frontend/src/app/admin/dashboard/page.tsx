@@ -4,7 +4,7 @@ import { classSessions, payments, clients, appointments, reports } from '@/lib/a
 import { StatsCard } from '@/components/admin/stats-card'
 import { SessionCard } from '@/components/admin/session-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrency, formatDateTime, appointmentStatusConfig, getInitials } from '@/lib/utils'
+import { formatCurrency, formatDateTime, formatInTenantTz, appointmentStatusConfig, getInitials } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp, Plus, Cake } from 'lucide-react'
@@ -48,23 +48,22 @@ export default function DashboardPage() {
     (c) => parseInt(c.birth_date!.split('-')[1]) === today.getMonth() + 1
   )
 
-  const todayStr = format(today, 'yyyy-MM-dd')
+  const todayStr = formatInTenantTz(new Date().toISOString(), 'yyyy-MM-dd')
   const { data: occupancyData = [], isLoading: loadingOccupancy } = useQuery({
     queryKey: ['occupancy-today', todayStr],
     queryFn: () => reports.occupancy({ from: todayStr, to: todayStr }),
   })
 
-  // Filtrar sesiones de hoy
-  const todaySessions = weekSessions?.filter((s) => {
-    const sessionDate = new Date(s.start_datetime)
-    return sessionDate.toDateString() === today.toDateString()
-  }) || []
+  // Filtrar sesiones de hoy (comparando en la zona del tenant, no la del navegador)
+  const todaySessions = weekSessions?.filter((s) =>
+    formatInTenantTz(s.start_datetime, 'yyyy-MM-dd') === todayStr
+  ) || []
 
   // Dummy bar chart data desde summary
   const chartData = weekSessions
     ? Object.entries(
         weekSessions.reduce((acc: Record<string, number>, s) => {
-          const day = format(new Date(s.start_datetime), 'EEE', { locale: undefined })
+          const day = formatInTenantTz(s.start_datetime, 'EEE')
           acc[day] = (acc[day] || 0) + s.enrolled_count
           return acc
         }, {})

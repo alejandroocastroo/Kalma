@@ -18,6 +18,7 @@ from app.models.client_membership import ClientMembership
 from app.models.payment import Payment
 from app.models.space import Space
 from app.utils.attendance import apply_attendance, revert_attendance
+from app.utils.timezone import get_tenant_zoneinfo, tenant_today, local_date_of
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
@@ -233,7 +234,8 @@ async def mark_appointment_paid(
     appt.paid = True
     appt.is_debt = False
 
-    payment_date = session.start_datetime.date() if session and session.start_datetime else date.today()
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    payment_date = local_date_of(session.start_datetime, tz) if session and session.start_datetime else tenant_today(tz)
     space_name = space.name if space else "Sin espacio"
 
     payment = Payment(

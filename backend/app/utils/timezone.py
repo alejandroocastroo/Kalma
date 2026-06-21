@@ -5,6 +5,7 @@ Cada tenant tiene un campo `timezone` (string IANA, ej. "America/Bogota",
 entre UTC y la hora local del tenant. El default es Bogotá (UTC-5), que preserva
 el comportamiento histórico de los tenants colombianos.
 """
+from datetime import date, datetime, timezone as _utc
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_TIMEZONE = "America/Bogota"
@@ -50,3 +51,36 @@ async def get_tenant_zoneinfo(db, tenant_id) -> ZoneInfo:
     from app.models.tenant import Tenant
     t = await db.get(Tenant, tenant_id)
     return get_zoneinfo(t.timezone if t else None)
+
+
+# ── Fase 2: fronteras de día/semana/mes en hora local del tenant ──────────────
+
+def tenant_today(tz: ZoneInfo) -> date:
+    """Fecha de 'hoy' en la zona del tenant (no la del servidor UTC)."""
+    return datetime.now(tz).date()
+
+
+def local_date_of(dt_utc: datetime, tz: ZoneInfo) -> date:
+    """Fecha calendario local del tenant para un instante almacenado en UTC."""
+    return dt_utc.astimezone(tz).date()
+
+
+def parse_local_to_utc(iso_str: str, tz: ZoneInfo) -> datetime:
+    """Parsea un ISO 'yyyy-MM-dd' (o con hora) que representa hora de pared del
+    tenant y devuelve el instante UTC. Si ya trae offset, solo lo normaliza a UTC."""
+    dt = datetime.fromisoformat(iso_str)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=tz)
+    return dt.astimezone(_utc.utc)
+
+
+def day_window_utc(d_from: date, d_to: date, tz: ZoneInfo) -> tuple[datetime, datetime]:
+    """Convierte un rango de fechas locales [d_from, d_to] (inclusive) al par de
+    instantes UTC [inicio, fin] que cubre esos días completos en la zona del tenant.
+
+    inicio = 00:00:00 local de d_from  →  UTC
+    fin    = 23:59:59 local de d_to    →  UTC
+    """
+    start = datetime(d_from.year, d_from.month, d_from.day, 0, 0, 0, tzinfo=tz).astimezone(_utc.utc)
+    end = datetime(d_to.year, d_to.month, d_to.day, 23, 59, 59, tzinfo=tz).astimezone(_utc.utc)
+    return start, end

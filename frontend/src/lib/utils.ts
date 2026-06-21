@@ -96,6 +96,17 @@ export function formatShortDate(dateStr: string): string {
   }
 }
 
+// Formatea un instante UTC en la zona horaria del tenant con un patrón date-fns
+// arbitrario. Usar SIEMPRE esto en vez de format(new Date(x), ...) para horas/fechas
+// que vienen del backend, así no dependen de la zona del navegador del usuario.
+export function formatInTenantTz(dateStr: string, fmt: string): string {
+  try {
+    return format(toZonedTime(parseISO(dateStr), getTenantTimezone()), fmt, { locale: es })
+  } catch {
+    return dateStr
+  }
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

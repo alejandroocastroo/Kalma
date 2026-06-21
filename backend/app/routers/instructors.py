@@ -12,6 +12,7 @@ from app.models.instructor import Instructor
 from app.models.class_session import ClassSession
 from app.models.space import Space
 from app.models.class_type import ClassType
+from app.utils.timezone import get_tenant_zoneinfo, tenant_today, day_window_utc
 
 router = APIRouter(prefix="/instructors", tags=["Instructores"])
 
@@ -58,8 +59,10 @@ async def list_instructors(
     )
     instructor_list = result.scalars().all()
 
-    now = datetime.now(timezone.utc)
-    month_start = datetime(now.year, now.month, 1, tzinfo=timezone.utc)
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    today = tenant_today(tz)
+    # Inicio del mes local del tenant → instante UTC para comparar contra start_datetime
+    month_start, _ = day_window_utc(today.replace(day=1), today, tz)
 
     enriched = []
     for inst in instructor_list:

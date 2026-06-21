@@ -11,6 +11,7 @@ from app.models.appointment import Appointment
 from app.models.class_session import ClassSession
 from app.models.space import Space
 from app.utils.membership_calc import get_cobros_priority
+from app.utils.timezone import get_tenant_zoneinfo, tenant_today
 from datetime import date, datetime
 from pydantic import BaseModel
 from typing import Optional, List
@@ -62,7 +63,8 @@ async def get_cobros(
     current_user=Depends(get_current_active_user),
 ):
     tenant_id = current_user.tenant_id
-    today = date.today()
+    tz = await get_tenant_zoneinfo(db, tenant_id)
+    today = tenant_today(tz)
 
     # ------------------------------------------------------------------ #
     # 1. Clients with active (non-cancelled) memberships

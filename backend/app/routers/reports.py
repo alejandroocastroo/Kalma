@@ -12,6 +12,7 @@ from app.schemas.reports import RevenueReport, OccupancyReport
 from app.models.space import Space
 from app.models.class_session import ClassSession
 from app.models.appointment import Appointment
+from app.utils.timezone import get_tenant_zoneinfo, parse_local_to_utc
 
 router = APIRouter(prefix="/reports", tags=["Reportes"])
 
@@ -44,8 +45,9 @@ async def revenue_by_space(
 ):
     _require_tenant(current_user)
 
-    start = datetime.fromisoformat(from_date)
-    end = datetime.fromisoformat(to_date)
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    start = parse_local_to_utc(from_date, tz)
+    end = parse_local_to_utc(to_date, tz)
 
     if space_id:
         # Single space
@@ -117,8 +119,9 @@ async def occupancy_by_space(
 ):
     _require_tenant(current_user)
 
-    start = datetime.fromisoformat(from_date)
-    end = datetime.fromisoformat(to_date)
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    start = parse_local_to_utc(from_date, tz)
+    end = parse_local_to_utc(to_date, tz)
 
     if space_id:
         space = await _get_space_or_404(uuid.UUID(space_id), current_user.tenant_id, db)

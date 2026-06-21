@@ -8,14 +8,14 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getInitials } from '@/lib/utils'
+import { getInitials, formatInTenantTz } from '@/lib/utils'
 import { Search, Plus, Phone, Mail, Edit, Calendar, Users } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Instructor, InstructorSession } from '@/types'
 
 function formatDateTime(dt: string) {
-  const d = new Date(dt)
-  return d.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+  // Hora local del tenant, no la del navegador
+  return formatInTenantTz(dt, "dd MMM yyyy, HH:mm")
 }
 
 export default function InstructoresPage() {

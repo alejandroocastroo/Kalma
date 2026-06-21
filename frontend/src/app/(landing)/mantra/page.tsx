@@ -483,7 +483,7 @@ export default async function MantraLandingPage() {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-stone-200">
               {schedule.map((session) => {
-                const date = new Date(session.start_datetime)
+                const date = new Date(session.start_local || session.start_datetime)
                 const dayName = DAYS_SHORT[date.getDay() === 0 ? 6 : date.getDay() - 1]
                 const time = date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
                 const isFull = session.available_spots === 0

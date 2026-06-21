@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import { Plus, RotateCcw, Pencil, RefreshCw, Calendar, ChevronRight, CheckCircle2, ArrowRight, XCircle, ChevronDown, ChevronUp } from 'lucide-react'
 import { plans as plansApi, memberships, clients as clientsApi, spaces as spacesApi, classSessions, payments as paymentsApi } from '@/lib/api'
 import type { ClientMembership, Plan, Client, WeeklyStats, AutoBookResult, ClassSession } from '@/types'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, formatInTenantTz } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, parseISO } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -239,8 +239,7 @@ function MakeupDialogContent({
         ) : (
           filtered.map(session => {
             const isSelected = selectedSession?.id === session.id
-            const dt = new Date(session.start_datetime)
-            const dateLabel = format(dt, "EEE d MMM · HH:mm", { locale: es })
+            const dateLabel = formatInTenantTz(session.start_datetime, "EEE d MMM · HH:mm")
             const spotsLeft = session.capacity - session.enrolled_count
             return (
               <button
@@ -275,7 +274,7 @@ function MakeupDialogContent({
 
       {selectedSession && (
         <div className="px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-700">
-          Reposición agendada para: <span className="font-semibold">{format(new Date(selectedSession.start_datetime), "EEE d MMM · HH:mm", { locale: es })}</span>
+          Reposición agendada para: <span className="font-semibold">{formatInTenantTz(selectedSession.start_datetime, "EEE d MMM · HH:mm")}</span>
           {membership?.membership_type === 'session_based' && membership.expiry_date && selectedSession.start_datetime.slice(0,10) > membership.expiry_date && (
             <span className="ml-1 text-amber-600">· La fecha de vencimiento se extenderá hasta este día</span>
           )}

@@ -27,7 +27,7 @@ export function BookingWidget({ sessions, whatsappPhone, studioName }: BookingWi
   const handleSend = () => {
     if (!form.full_name.trim() || !form.phone.trim()) return
 
-    const date = new Date(selectedSession!.start_datetime)
+    const date = new Date(selectedSession!.start_local || selectedSession!.start_datetime)
     const weekday = date.toLocaleDateString('es-CO', { weekday: 'long' })
     const dateStr = date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long' })
     const time = date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -107,7 +107,7 @@ export function BookingWidget({ sessions, whatsappPhone, studioName }: BookingWi
               </p>
             ) : (
               availableSessions.map((session) => {
-                const date = new Date(session.start_datetime)
+                const date = new Date(session.start_local || session.start_datetime)
                 const days = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb']
                 const day = days[date.getDay()]
                 const time = date.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: true })
@@ -162,7 +162,7 @@ export function BookingWidget({ sessions, whatsappPhone, studioName }: BookingWi
               <div className="bg-primary-50 rounded-xl p-3 text-sm">
                 <p className="font-semibold text-primary-900">{selectedSession.class_type.name}</p>
                 <p className="text-primary-700">
-                  {new Date(selectedSession.start_datetime).toLocaleString('es-CO', {
+                  {new Date(selectedSession.start_local || selectedSession.start_datetime).toLocaleString('es-CO', {
                     weekday: 'long', day: 'numeric', month: 'long',
                     hour: '2-digit', minute: '2-digit', hour12: true,
                   })}

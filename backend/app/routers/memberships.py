@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
-from app.utils.timezone import get_tenant_zoneinfo
+from app.utils.timezone import get_tenant_zoneinfo, tenant_today, day_window_utc
 from app.models.client_membership import ClientMembership
 from app.models.plan import Plan
 from app.models.client import Client
@@ -367,9 +367,10 @@ async def create_membership_v2(
 
     # Conteo retroactivo: si start_date está en el pasado, buscar asistencias
     # del cliente en ese rango y ajustar sessions_used / space_usage.
-    if body.membership_type != "monthly" and body.start_date <= date.today():
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    if body.membership_type != "monthly" and body.start_date <= tenant_today(tz):
         now_utc = datetime.now(timezone.utc)
-        start_dt = datetime(body.start_date.year, body.start_date.month, body.start_date.day, tzinfo=timezone.utc)
+        start_dt = datetime(body.start_date.year, body.start_date.month, body.start_date.day, tzinfo=tz).astimezone(timezone.utc)
 
         attended_q = (
             select(Appointment, ClassSession)
@@ -695,11 +696,11 @@ async def weekly_stats(
     client = await db.get(Client, m.client_id)
     plan = await db.get(Plan, m.plan_id)
 
-    today = date.today()
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    today = tenant_today(tz)
     week_start = today - timedelta(days=today.weekday())  # lunes
     week_end = week_start + timedelta(days=6)  # domingo
-    week_start_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=timezone.utc)
-    week_end_dt = datetime(week_end.year, week_end.month, week_end.day, 23, 59, 59, tzinfo=timezone.utc)
+    week_start_dt, week_end_dt = day_window_utc(week_start, week_end, tz)
     now = datetime.now(timezone.utc)
 
     # attended this week
@@ -732,8 +733,7 @@ async def weekly_stats(
     month_end = date(today.year, today.month, last_day)
     # Respetar start_date: no contar clases anteriores al inicio de la membresía
     effective_start = max(month_start, m.start_date)
-    month_start_dt = datetime(effective_start.year, effective_start.month, effective_start.day, tzinfo=timezone.utc)
-    month_end_dt = datetime(month_end.year, month_end.month, month_end.day, 23, 59, 59, tzinfo=timezone.utc)
+    month_start_dt, month_end_dt = day_window_utc(effective_start, month_end, tz)
 
     # attended este mes (desde start_date de la membresía)
     used_month_q = select(func.count()).select_from(Appointment).join(
@@ -819,16 +819,15 @@ async def auto_book_membership(
         raise HTTPException(400, "La membresía no tiene horario fijo configurado")
 
     # Rango: session_based y hybrid_fixed hasta expiry_date; resto fin del mes
-    today = date.today()
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    today = tenant_today(tz)
     # Respetar start_date: no agendar sesiones antes de que la membresía inicie
     effective_start = max(today, m.start_date) if m.start_date else today
-    range_start = datetime(effective_start.year, effective_start.month, effective_start.day, tzinfo=timezone.utc)
     if m.membership_type in ("session_based", "hybrid_fixed") and m.expiry_date:
-        range_end = datetime(m.expiry_date.year, m.expiry_date.month, m.expiry_date.day,
-                             23, 59, 59, tzinfo=timezone.utc)
+        range_start, range_end = day_window_utc(effective_start, m.expiry_date, tz)
     else:
         last_day = monthrange(today.year, today.month)[1]
-        range_end = datetime(today.year, today.month, last_day, 23, 59, 59, tzinfo=timezone.utc)
+        range_start, range_end = day_window_utc(effective_start, date(today.year, today.month, last_day), tz)
 
     q = select(ClassSession).where(
         ClassSession.tenant_id == current_user.tenant_id,
@@ -847,8 +846,6 @@ async def auto_book_membership(
 
     result = await db.execute(q)
     sessions = result.scalars().all()
-
-    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
     def _matches(s: ClassSession) -> bool:
         local = s.start_datetime.astimezone(tz)

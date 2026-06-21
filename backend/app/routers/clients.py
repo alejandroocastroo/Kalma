@@ -14,6 +14,7 @@ from app.schemas.common import PaginatedResponse
 from app.models.client import Client
 from app.models.client_membership import ClientMembership
 from app.models.plan import Plan
+from app.utils.timezone import get_tenant_zoneinfo, tenant_today
 
 router = APIRouter(prefix="/clients", tags=["Clientes"])
 
@@ -113,7 +114,8 @@ async def birthdays_two_months(
 ):
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
-    today = date.today()
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    today = tenant_today(tz)
     this_month = today.month
     # Next month wrapping December → January
     next_month = 1 if this_month == 12 else this_month + 1
@@ -191,7 +193,6 @@ async def client_appointments(
     from app.models.class_session import ClassSession
     from app.models.class_type import ClassType
     from app.models.space import Space
-    from app.utils.timezone import get_tenant_zoneinfo
 
     tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
