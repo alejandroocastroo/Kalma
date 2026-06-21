@@ -104,13 +104,18 @@ async def deactivate_space(
 
     probe = json.dumps([{"space_id": str(space.id)}])
     ref_check = await db.execute(text("""
-        SELECT 1 FROM plans
-          WHERE space_quotas @> CAST(:probe AS jsonb)
-          AND tenant_id = :tenant LIMIT 1
-        UNION ALL
-        SELECT 1 FROM client_memberships
-          WHERE space_quotas @> CAST(:probe AS jsonb)
-          AND tenant_id = :tenant AND status != 'cancelled' LIMIT 1
+        SELECT 1 WHERE
+          EXISTS (
+            SELECT 1 FROM plans
+            WHERE space_quotas @> CAST(:probe AS jsonb)
+              AND tenant_id = :tenant
+          )
+          OR EXISTS (
+            SELECT 1 FROM client_memberships
+            WHERE space_quotas @> CAST(:probe AS jsonb)
+              AND tenant_id = :tenant
+              AND status != 'cancelled'
+          )
     """), {"probe": probe, "tenant": str(current_user.tenant_id)})
     if ref_check.first():
         raise HTTPException(400, "No se puede desactivar: el espacio está en uso por un plan o membresía híbrida activa")
