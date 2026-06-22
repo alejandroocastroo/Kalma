@@ -61,6 +61,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     from app.models.user import User
+    from app.models.tenant import Tenant
 
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -72,10 +73,25 @@ async def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.id == uuid.UUID(user_id)))
-    user = result.scalar_one_or_none()
+    # Cargamos el usuario y, en la misma consulta, si su tenant está activo.
+    # outerjoin → el superadmin (sin tenant) devuelve tenant_active = None y se exenta.
+    result = await db.execute(
+        select(User, Tenant.is_active)
+        .outerjoin(Tenant, User.tenant_id == Tenant.id)
+        .where(User.id == uuid.UUID(user_id))
+    )
+    row = result.first()
+    if row is None:
+        raise credentials_exception
+    user, tenant_active = row
     if user is None or not user.is_active:
         raise credentials_exception
+    # Si el usuario pertenece a un estudio, este debe estar activo.
+    if user.tenant_id is not None and not tenant_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El estudio está desactivado. Contacta al administrador.",
+        )
     return user
 
 

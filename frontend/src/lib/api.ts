@@ -32,6 +32,18 @@ apiClient.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config
+    // Tenant desactivado por el superadmin: cortar la sesión abierta limpiamente.
+    // Se excluyen los endpoints de /auth/ porque ahí el formulario de login ya
+    // muestra el mensaje de error y no queremos disparar un redirect en su lugar.
+    if (
+      error.response?.status === 403 &&
+      typeof error.response?.data?.detail === 'string' &&
+      error.response.data.detail.includes('estudio está desactivado') &&
+      !original?.url?.includes('/auth/')
+    ) {
+      logout()
+      return Promise.reject(error)
+    }
     if (error.response?.status === 401 && !original._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {

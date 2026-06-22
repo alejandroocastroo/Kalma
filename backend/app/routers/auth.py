@@ -29,22 +29,24 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
     if not user or not verify_password(body.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales incorrectas")
 
+    # El estudio (tenant) debe estar activo. El superadmin no tiene tenant → se exenta.
+    tenant_slug = None
+    tenant_currency = "COP"
+    tenant_timezone = "America/Bogota"
+    if user.tenant_id:
+        t = await db.get(Tenant, user.tenant_id)
+        if not t or not t.is_active:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="El estudio está desactivado. Contacta al administrador.")
+        tenant_slug = t.slug
+        tenant_currency = t.currency or "COP"
+        tenant_timezone = t.timezone or "America/Bogota"
+
     token_data = {"sub": str(user.id), "role": user.role}
     access_token = create_access_token(token_data)
     refresh_token, jti = create_refresh_token(token_data)
 
     redis = await get_redis()
     await redis.setex(f"{REFRESH_TOKEN_PREFIX}{jti}", _REFRESH_TTL, str(user.id))
-
-    tenant_slug = None
-    tenant_currency = "COP"
-    tenant_timezone = "America/Bogota"
-    if user.tenant_id:
-        t = await db.get(Tenant, user.tenant_id)
-        if t:
-            tenant_slug = t.slug
-            tenant_currency = t.currency or "COP"
-            tenant_timezone = t.timezone or "America/Bogota"
 
     return TokenResponse(
         access_token=access_token,
@@ -86,21 +88,23 @@ async def refresh_token(request: Request, body: RefreshRequest, db: AsyncSession
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Usuario no encontrado")
 
-    token_data = {"sub": str(user.id), "role": user.role}
-    access_token = create_access_token(token_data)
-    new_refresh, new_jti = create_refresh_token(token_data)
-
-    await redis.setex(f"{REFRESH_TOKEN_PREFIX}{new_jti}", _REFRESH_TTL, str(user.id))
-
+    # El estudio debe seguir activo para renovar la sesión.
     tenant_slug = None
     tenant_currency = "COP"
     tenant_timezone = "America/Bogota"
     if user.tenant_id:
         t = await db.get(Tenant, user.tenant_id)
-        if t:
-            tenant_slug = t.slug
-            tenant_currency = t.currency or "COP"
-            tenant_timezone = t.timezone or "America/Bogota"
+        if not t or not t.is_active:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="El estudio está desactivado. Contacta al administrador.")
+        tenant_slug = t.slug
+        tenant_currency = t.currency or "COP"
+        tenant_timezone = t.timezone or "America/Bogota"
+
+    token_data = {"sub": str(user.id), "role": user.role}
+    access_token = create_access_token(token_data)
+    new_refresh, new_jti = create_refresh_token(token_data)
+
+    await redis.setex(f"{REFRESH_TOKEN_PREFIX}{new_jti}", _REFRESH_TTL, str(user.id))
 
     return TokenResponse(
         access_token=access_token,
