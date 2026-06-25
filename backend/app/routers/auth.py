@@ -200,9 +200,14 @@ async def get_custom_categories(
         raise HTTPException(403, "Sin tenant")
     tenant = await db.get(Tenant, current_user.tenant_id)
     cats = (tenant.custom_categories or {}) if tenant else {}
+    hidden = (tenant.hidden_categories or {}) if tenant else {}
     return {
         "income": cats.get("income", []),
         "expense": cats.get("expense", []),
+        "hidden": {
+            "income": hidden.get("income", []),
+            "expense": hidden.get("expense", []),
+        },
     }
 
 
@@ -260,3 +265,52 @@ async def delete_custom_category(
     tenant.custom_categories = cats
     await db.commit()
     return {"income": cats.get("income", []), "expense": cats.get("expense", [])}
+
+
+class HiddenCategoryBody(PydanticBaseModel):
+    type: str   # "income" | "expense"
+    key: str    # clave de la categoría predeterminada, p.ej. "clase_dia"
+
+
+@router.post("/hidden-categories")
+async def hide_default_category(
+    body: HiddenCategoryBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Oculta una categoría predeterminada para el tenant."""
+    from app.models.tenant import Tenant
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    if body.type not in ("income", "expense"):
+        raise HTTPException(400, "type debe ser 'income' o 'expense'")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    hidden = dict(tenant.hidden_categories or {})
+    current = hidden.get(body.type, [])
+    if body.key not in current:
+        hidden[body.type] = current + [body.key]
+        tenant.hidden_categories = hidden
+        await db.commit()
+    return {"income": hidden.get("income", []), "expense": hidden.get("expense", [])}
+
+
+@router.delete("/hidden-categories")
+async def show_default_category(
+    body: HiddenCategoryBody,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Restaura (deja de ocultar) una categoría predeterminada del tenant."""
+    from app.models.tenant import Tenant
+    if not current_user.tenant_id:
+        raise HTTPException(403, "Sin tenant")
+    tenant = await db.get(Tenant, current_user.tenant_id)
+    if not tenant:
+        raise HTTPException(404, "Tenant no encontrado")
+    hidden = dict(tenant.hidden_categories or {})
+    hidden[body.type] = [k for k in hidden.get(body.type, []) if k != body.key]
+    tenant.hidden_categories = hidden
+    await db.commit()
+    return {"income": hidden.get("income", []), "expense": hidden.get("expense", [])}
