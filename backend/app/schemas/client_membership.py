@@ -78,6 +78,7 @@ class ClientMembershipResponse(BaseModel):
     plan_name: Optional[str] = None
     plan_classes_per_week: Optional[int] = None
     plan_price_cop: Optional[int] = None
+    plan_space_id: Optional[uuid.UUID] = None
     preferred_space_name: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)

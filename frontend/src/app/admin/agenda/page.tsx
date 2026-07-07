@@ -13,10 +13,27 @@ import { fromZonedTime, toZonedTime } from 'date-fns-tz'
 import { es } from 'date-fns/locale'
 import { toast } from 'sonner'
 import { getTenantTimezone } from '@/lib/auth'
-import type { ClassSession, Client as ClientType, Instructor } from '@/types'
+import type { ClassSession, Client as ClientType, Instructor, ClientMembership } from '@/types'
 
 // ClassSession may carry space_id from the backend even if not yet in the shared type
 type SessionWithSpace = ClassSession & { space_id?: string | null }
+
+// Determina si una membresía cubre el espacio de la sesión que se está agendando.
+// - Híbrida (space_quotas): cubre solo los espacios listados en las cuotas.
+// - Plan de un espacio (plan_space_id): cubre solo ese espacio.
+// - Plan general (sin espacio ni cuotas): válido en cualquier espacio.
+// Si la sesión no tiene espacio, no se restringe.
+function membershipCoversSpace(m: ClientMembership, spaceId?: string | null): boolean {
+  if (m.space_quotas && m.space_quotas.length > 0) {
+    if (!spaceId) return true
+    return m.space_quotas.some((q) => q.space_id === spaceId)
+  }
+  if (m.plan_space_id) {
+    if (!spaceId) return true
+    return m.plan_space_id === spaceId
+  }
+  return true
+}
 
 const HOURS = Array.from({ length: 18 }, (_, i) => i + 6) // 6am - 11pm (23:00)
 
@@ -188,12 +205,15 @@ function QuickBookModal({ day, hour, onClose }: QuickBookModalProps) {
     }
 
     if (selectedClient) {
-      // Check active membership before booking
+      // Check active membership *for this space* before booking
       try {
         const activeMembershipsResp = await memberships.list({ client_id: selectedClient.id, status: 'active' })
-        const activeMemberships = activeMembershipsResp.items ?? activeMembershipsResp
-        if ((activeMemberships as unknown[]).length === 0) {
-          // No active membership — show debt dialog
+        const activeMemberships = (activeMembershipsResp.items ?? activeMembershipsResp) as ClientMembership[]
+        // El cliente puede tener membresía activa en otro espacio: solo cuenta
+        // si alguna cubre el espacio de esta sesión.
+        const hasCoverage = activeMemberships.some((m) => membershipCoversSpace(m, spaceId))
+        if (!hasCoverage) {
+          // Sin membresía válida para este espacio — mostrar diálogo de cobro
           setDebtDialog({
             open: true,
             clientName: selectedClient.full_name,
@@ -945,11 +965,16 @@ export default function AgendaPage() {
       return
     }
 
-    // Check active membership
+    // Check active membership *for this session's space*
     try {
       const activeMembershipsResp = await memberships.list({ client_id: client.id, status: 'active' })
-      const activeMembershipsArr = activeMembershipsResp.items ?? activeMembershipsResp
-      if ((activeMembershipsArr as unknown[]).length === 0) {
+      const activeMembershipsArr = (activeMembershipsResp.items ?? activeMembershipsResp) as ClientMembership[]
+      // Aunque el cliente tenga membresía activa, si es de otro espacio debe
+      // saltar la alerta de cobro para el espacio de esta sesión.
+      const hasCoverage = activeMembershipsArr.some((m) =>
+        membershipCoversSpace(m, (selectedSession as SessionWithSpace).space_id)
+      )
+      if (!hasCoverage) {
         setAddClientDebtDialog({
           open: true,
           clientName: client.full_name,

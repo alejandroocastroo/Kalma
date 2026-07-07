@@ -358,6 +358,7 @@ export interface ClientMembership {
   plan_name?: string;
   plan_classes_per_week?: number;
   plan_price_cop?: number;
+  plan_space_id?: string | null;
   preferred_space_name?: string;
 }
 

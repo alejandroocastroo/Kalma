@@ -100,6 +100,7 @@ def _enrich_loaded(m: ClientMembership) -> dict:
     data["plan_name"] = plan.name if plan else None
     data["plan_classes_per_week"] = getattr(plan, "classes_per_week", None) if plan else None
     data["plan_price_cop"] = getattr(plan, "price_cop", None) if plan else None
+    data["plan_space_id"] = getattr(plan, "space_id", None) if plan else None
     data["preferred_space_name"] = m.preferred_space.name if m.preferred_space else None
     data["membership_type"] = m.membership_type
     data["billing_day"] = m.billing_day
@@ -145,6 +146,7 @@ async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
     data["plan_name"] = plan.name if plan else None
     data["plan_classes_per_week"] = getattr(plan, "classes_per_week", None) if plan else None
     data["plan_price_cop"] = getattr(plan, "price_cop", None) if plan else None
+    data["plan_space_id"] = getattr(plan, "space_id", None) if plan else None
     data["preferred_space_name"] = space.name if space else None
     data["membership_type"] = m.membership_type
     data["billing_day"] = m.billing_day
