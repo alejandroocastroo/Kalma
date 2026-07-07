@@ -13,24 +13,23 @@ from app.models.payment import Payment
 from app.models.client import Client
 from app.models.space import Space
 from app.models.instructor import Instructor
+from app.models.appointment import Appointment
+from app.utils.ownership import assert_owned, get_if_owned
 
 router = APIRouter(prefix="/payments", tags=["Pagos / Caja"])
 
 
-async def _enrich(p: Payment, db: AsyncSession) -> dict:
+async def _enrich(p: Payment, db: AsyncSession, tenant_id: uuid.UUID) -> dict:
     data = PaymentResponse.model_validate(p).model_dump()
-    if p.client_id:
-        client = await db.get(Client, p.client_id)
-        if client:
-            data["client_name"] = client.full_name
-    if p.space_id:
-        space = await db.get(Space, p.space_id)
-        if space:
-            data["space_name"] = space.name
-    if p.instructor_id:
-        instructor = await db.get(Instructor, p.instructor_id)
-        if instructor:
-            data["instructor_name"] = instructor.full_name
+    client = await get_if_owned(db, Client, p.client_id, tenant_id)
+    if client:
+        data["client_name"] = client.full_name
+    space = await get_if_owned(db, Space, p.space_id, tenant_id)
+    if space:
+        data["space_name"] = space.name
+    instructor = await get_if_owned(db, Instructor, p.instructor_id, tenant_id)
+    if instructor:
+        data["instructor_name"] = instructor.full_name
     return data
 
 
@@ -56,7 +55,7 @@ async def list_payments(
         q = q.where(Payment.space_id == uuid.UUID(space_id))
     result = await db.execute(q.order_by(Payment.payment_date.desc()))
     payments = result.scalars().all()
-    return [await _enrich(p, db) for p in payments]
+    return [await _enrich(p, db, current_user.tenant_id) for p in payments]
 
 
 @router.get("/summary", response_model=CashFlowSummary)
@@ -134,6 +133,11 @@ async def create_payment(
 ):
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
+    # Validar que toda FK entrante pertenezca al tenant (evita fuga cross-tenant)
+    await assert_owned(db, Client, body.client_id, current_user.tenant_id, "Cliente no encontrado")
+    await assert_owned(db, Space, body.space_id, current_user.tenant_id, "Espacio no encontrado")
+    await assert_owned(db, Instructor, body.instructor_id, current_user.tenant_id, "Instructor no encontrado")
+    await assert_owned(db, Appointment, body.appointment_id, current_user.tenant_id, "Cita no encontrada")
     payment = Payment(
         tenant_id=current_user.tenant_id,
         created_by=current_user.id,
@@ -142,7 +146,7 @@ async def create_payment(
     db.add(payment)
     await db.commit()
     await db.refresh(payment)
-    return await _enrich(payment, db)
+    return await _enrich(payment, db, current_user.tenant_id)
 
 
 @router.put("/{payment_id}", response_model=PaymentResponse)
@@ -161,11 +165,14 @@ async def update_payment(
     payment = result.scalar_one_or_none()
     if not payment:
         raise HTTPException(404, "Pago no encontrado")
+    # Validar FKs entrantes contra el tenant antes de reasignarlas
+    await assert_owned(db, Space, body.space_id, current_user.tenant_id, "Espacio no encontrado")
+    await assert_owned(db, Instructor, body.instructor_id, current_user.tenant_id, "Instructor no encontrado")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(payment, field, value)
     await db.commit()
     await db.refresh(payment)
-    return await _enrich(payment, db)
+    return await _enrich(payment, db, current_user.tenant_id)
 
 
 @router.delete("/{payment_id}")

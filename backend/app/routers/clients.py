@@ -193,6 +193,7 @@ async def client_appointments(
     from app.models.class_session import ClassSession
     from app.models.class_type import ClassType
     from app.models.space import Space
+    from app.utils.ownership import get_if_owned
 
     tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
@@ -207,7 +208,7 @@ async def client_appointments(
         .limit(50)
     )
     appointments = result.scalars().all()
-    client_obj = await db.get(Client, uuid.UUID(client_id))
+    client_obj = await get_if_owned(db, Client, uuid.UUID(client_id), current_user.tenant_id)
     client_name = client_obj.full_name if client_obj else None
     client_phone = client_obj.phone if client_obj else None
     enriched = []

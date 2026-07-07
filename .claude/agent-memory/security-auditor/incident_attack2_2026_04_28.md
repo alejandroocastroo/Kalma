@@ -36,3 +36,5 @@ Active exploitation confirmed on 2026-04-28 in the frontend Next.js container.
 
 **Why**: Recorded 2026-04-28 as active incident context. All future audits should verify Next.js version and confirm secrets have been rotated.
 **How to apply**: Before any future audit, verify next version is >= 15.2.4 and confirm incident secrets were rotated. Do not re-flag these as new findings if fixed.
+
+**UPDATE 2026-07-06**: Next.js confirmed upgraded to 15.5.15 (frontend/package.json) — RCE vector (CVE-2024-56332/46982) closed. `./backend:/app` volume mount removed from production compose. `no-new-privileges` container hardening added. Still open: python-jose 3.3.0, bcrypt 3.2.2, no USER in backend Dockerfile, CSP still has unsafe-eval, middleware.ts decodeJwtPayload still does not verify signature. Could NOT verify from the repo alone whether SECRET_KEY/POSTGRES_PASSWORD/REDIS_PASSWORD were actually rotated on the live production server — docker-compose.yml still has weak hardcoded fallback defaults, which is a separate issue from whether the real deployed secrets were rotated. See [[audit_findings_2026_07]] for full current-state audit.

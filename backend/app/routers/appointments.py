@@ -19,21 +19,22 @@ from app.models.payment import Payment
 from app.models.space import Space
 from app.utils.attendance import apply_attendance, revert_attendance
 from app.utils.timezone import get_tenant_zoneinfo, tenant_today, local_date_of
+from app.utils.ownership import assert_owned, get_if_owned
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
 
-async def _enrich(appt: Appointment, db: AsyncSession) -> dict:
+async def _enrich(appt: Appointment, db: AsyncSession, tenant_id: uuid.UUID) -> dict:
     data = AppointmentResponse.model_validate(appt).model_dump()
-    client = await db.get(Client, appt.client_id)
+    client = await get_if_owned(db, Client, appt.client_id, tenant_id)
     if client:
         data["client_name"] = client.full_name
         data["client_phone"] = client.phone
         data["client_notes"] = client.notes
-    session = await db.get(ClassSession, appt.class_session_id)
+    session = await get_if_owned(db, ClassSession, appt.class_session_id, tenant_id)
     if session:
         data["session_start"] = session.start_datetime
-        ct = await db.get(ClassType, session.class_type_id)
+        ct = await get_if_owned(db, ClassType, session.class_type_id, tenant_id)
         if ct:
             data["class_type_name"] = ct.name
     return data
@@ -53,7 +54,7 @@ async def list_appointments(
         q = q.where(Appointment.class_session_id == uuid.UUID(session_id))
     result = await db.execute(q.order_by(Appointment.created_at.desc()))
     appointments = result.scalars().all()
-    return [await _enrich(a, db) for a in appointments]
+    return [await _enrich(a, db, current_user.tenant_id) for a in appointments]
 
 
 @router.post("", response_model=AppointmentResponse, status_code=201)
@@ -68,6 +69,8 @@ async def create_appointment(
     session = await db.get(ClassSession, body.class_session_id)
     if not session or session.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Sesión no encontrada")
+    # Validar que el cliente pertenezca al tenant (evita fuga cross-tenant de PII/salud)
+    await assert_owned(db, Client, body.client_id, current_user.tenant_id, "Cliente no encontrado")
     if session.enrolled_count >= session.capacity:
         raise HTTPException(400, "La sesión está llena")
 
@@ -91,7 +94,7 @@ async def create_appointment(
 
     await db.commit()
     await db.refresh(appt)
-    return await _enrich(appt, db)
+    return await _enrich(appt, db, current_user.tenant_id)
 
 
 @router.put("/{appt_id}", response_model=AppointmentResponse)
@@ -114,7 +117,7 @@ async def update_appointment(
         setattr(appt, field, value)
     await db.commit()
     await db.refresh(appt)
-    return await _enrich(appt, db)
+    return await _enrich(appt, db, current_user.tenant_id)
 
 
 @router.delete("/{appt_id}", status_code=200)

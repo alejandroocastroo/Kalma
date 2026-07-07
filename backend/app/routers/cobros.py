@@ -143,6 +143,7 @@ async def get_cobros(
         client_rows_result = await db.execute(
             select(Client).where(
                 Client.id.in_(no_membership_client_ids),
+                Client.tenant_id == current_user.tenant_id,
                 Client.is_active == True,
             )
         )

@@ -27,6 +27,8 @@ from app.utils.membership_calc import (
     calculate_expiry_date_hybrid, initial_space_usage,
 )
 from app.utils.attendance import apply_attendance
+from app.utils.ownership import assert_owned, get_if_owned
+from app.models.space import Space
 
 router = APIRouter(prefix="/memberships", tags=["Membresías"])
 
@@ -94,14 +96,17 @@ class MembershipCreateV2(BaseModel):
 def _enrich_loaded(m: ClientMembership) -> dict:
     """Sync enrichment — requires relationships already loaded via selectinload."""
     data = ClientMembershipResponse.model_validate(m).model_dump()
-    client = m.client
-    plan = m.plan
+    # Defensa en profundidad: no exponer relaciones que (por datos heredados)
+    # pudieran pertenecer a otro tenant.
+    client = m.client if (m.client and m.client.tenant_id == m.tenant_id) else None
+    plan = m.plan if (m.plan and m.plan.tenant_id == m.tenant_id) else None
+    pref_space = m.preferred_space if (m.preferred_space and m.preferred_space.tenant_id == m.tenant_id) else None
     data["client_name"] = client.full_name if client else None
     data["plan_name"] = plan.name if plan else None
     data["plan_classes_per_week"] = getattr(plan, "classes_per_week", None) if plan else None
     data["plan_price_cop"] = getattr(plan, "price_cop", None) if plan else None
     data["plan_space_id"] = getattr(plan, "space_id", None) if plan else None
-    data["preferred_space_name"] = m.preferred_space.name if m.preferred_space else None
+    data["preferred_space_name"] = pref_space.name if pref_space else None
     data["membership_type"] = m.membership_type
     data["billing_day"] = m.billing_day
     data["next_billing_date"] = m.next_billing_date
@@ -129,11 +134,10 @@ def _enrich_loaded(m: ClientMembership) -> dict:
 
 async def _enrich(m: ClientMembership, db: AsyncSession) -> dict:
     """Async enrichment — used after individual writes where relationships aren't pre-loaded."""
-    from app.models.space import Space
     await db.refresh(m)
-    client = await db.get(Client, m.client_id)
-    plan = await db.get(Plan, m.plan_id)
-    space = await db.get(Space, m.preferred_space_id) if m.preferred_space_id else None
+    client = await get_if_owned(db, Client, m.client_id, m.tenant_id)
+    plan = await get_if_owned(db, Plan, m.plan_id, m.tenant_id)
+    space = await get_if_owned(db, Space, m.preferred_space_id, m.tenant_id)
     mu_result = await db.execute(
         select(MakeupSession)
         .where(MakeupSession.membership_id == m.id)
@@ -280,6 +284,10 @@ async def create_membership(
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
+    # Validar que cliente, plan y espacio preferido sean del tenant
+    await assert_owned(db, Client, body.client_id, current_user.tenant_id, "Cliente no encontrado")
+    await assert_owned(db, Plan, body.plan_id, current_user.tenant_id, "Plan no encontrado")
+    await assert_owned(db, Space, body.preferred_space_id, current_user.tenant_id, "Espacio no encontrado")
     m = ClientMembership(tenant_id=current_user.tenant_id, **body.model_dump())
     db.add(m)
     await db.commit()
@@ -298,6 +306,13 @@ async def create_membership_v2(
     - monthly: calcula billing_day y next_billing_date desde start_date.
     - session_based: calcula total_sessions y expiry_date desde scheduled_days.
     """
+    # Validar que cliente, plan, espacio preferido y espacios de cuotas sean del tenant
+    await assert_owned(db, Client, body.client_id, current_user.tenant_id, "Cliente no encontrado")
+    await assert_owned(db, Plan, body.plan_id, current_user.tenant_id, "Plan no encontrado")
+    await assert_owned(db, Space, body.preferred_space_id, current_user.tenant_id, "Espacio no encontrado")
+    for q in (body.space_quotas or []):
+        await assert_owned(db, Space, q.space_id, current_user.tenant_id, "Espacio no encontrado")
+
     data = body.model_dump()
 
     if body.membership_type == "monthly":
@@ -542,6 +557,10 @@ async def update_membership(
             update_data["expiry_date"] = calculate_expiry_date_hybrid(
                 effective_start, m.space_quotas
             )
+
+    # Validar espacio preferido entrante contra el tenant
+    if "preferred_space_id" in update_data:
+        await assert_owned(db, Space, update_data["preferred_space_id"], current_user.tenant_id, "Espacio no encontrado")
 
     for field, value in update_data.items():
         setattr(m, field, value)

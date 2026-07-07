@@ -26,28 +26,26 @@ from app.models.client import Client
 from app.models.instructor import Instructor
 from app.models.client_membership import ClientMembership
 from app.utils.attendance import revert_attendance
+from app.utils.ownership import assert_owned, get_if_owned
 
 router = APIRouter(prefix="/class-sessions", tags=["Sesiones de Clase"])
 
 
-async def _enrich(session: ClassSession, db: AsyncSession) -> dict:
+async def _enrich(session: ClassSession, db: AsyncSession, tenant_id: uuid.UUID) -> dict:
     data = ClassSessionResponse.model_validate(session).model_dump()
-    if session.class_type_id:
-        ct = await db.get(ClassType, session.class_type_id)
-        if ct:
-            data["class_type_name"] = ct.name
-            data["class_type_color"] = ct.color
-    if session.space_id:
-        space = await db.get(Space, session.space_id)
-        if space:
-            data["space_name"] = space.name
-            if not data.get("class_type_name"):
-                data["class_type_name"] = space.name
-                data["class_type_color"] = data.get("class_type_color") or "#6366f1"
-    if session.instructor_id:
-        instructor = await db.get(Instructor, session.instructor_id)
-        if instructor:
-            data["instructor_name"] = instructor.full_name
+    ct = await get_if_owned(db, ClassType, session.class_type_id, tenant_id)
+    if ct:
+        data["class_type_name"] = ct.name
+        data["class_type_color"] = ct.color
+    space = await get_if_owned(db, Space, session.space_id, tenant_id)
+    if space:
+        data["space_name"] = space.name
+        if not data.get("class_type_name"):
+            data["class_type_name"] = space.name
+            data["class_type_color"] = data.get("class_type_color") or "#6366f1"
+    instructor = await get_if_owned(db, Instructor, session.instructor_id, tenant_id)
+    if instructor:
+        data["instructor_name"] = instructor.full_name
     # custom_name overrides the display name if set
     if session.custom_name:
         data["class_type_name"] = session.custom_name
@@ -191,7 +189,7 @@ async def list_sessions(
     sessions = result.scalars().all()
     enriched = []
     for s in sessions:
-        enriched.append(await _enrich(s, db))
+        enriched.append(await _enrich(s, db, current_user.tenant_id))
     return enriched
 
 
@@ -217,7 +215,7 @@ async def week_sessions(
         .order_by(ClassSession.start_datetime)
     )
     sessions = result.scalars().all()
-    return [await _enrich(s, db) for s in sessions]
+    return [await _enrich(s, db, current_user.tenant_id) for s in sessions]
 
 
 @router.post("", response_model=ClassSessionResponse, status_code=201)
@@ -242,13 +240,14 @@ async def create_session(
         if not class_type:
             raise HTTPException(404, "Tipo de clase no encontrado")
 
+    # Validar instructor contra el tenant (el espacio se valida abajo)
+    await assert_owned(db, Instructor, body.instructor_id, current_user.tenant_id, "Instructor no encontrado")
+
     # Resolve capacity: use body value, then space capacity, then hard default
     capacity = body.capacity
     space = None
     if body.space_id:
-        space = await db.get(Space, body.space_id)
-        if body.space_id and not space:
-            raise HTTPException(404, "Espacio no encontrado")
+        space = await assert_owned(db, Space, body.space_id, current_user.tenant_id, "Espacio no encontrado")
         overlap = await db.execute(
             select(ClassSession).where(
                 ClassSession.space_id == body.space_id,
@@ -280,7 +279,7 @@ async def create_session(
     db.add(session)
     await db.commit()
     await db.refresh(session)
-    return await _enrich(session, db)
+    return await _enrich(session, db, current_user.tenant_id)
 
 
 @router.post("/quick-book", response_model=QuickBookResponse, status_code=201)
@@ -327,9 +326,7 @@ async def quick_book(
     capacity = body.capacity
     space: Space | None = None
     if body.space_id:
-        space = await db.get(Space, body.space_id)
-        if not space:
-            raise HTTPException(404, "Espacio no encontrado")
+        space = await assert_owned(db, Space, body.space_id, current_user.tenant_id, "Espacio no encontrado")
         overlap = await db.execute(
             select(ClassSession).where(
                 ClassSession.space_id == body.space_id,
@@ -395,7 +392,7 @@ async def quick_book(
         await db.refresh(appt)
 
     # 8. Build enriched response
-    enriched_session = await _enrich(session, db)
+    enriched_session = await _enrich(session, db, current_user.tenant_id)
 
     enriched_appt: dict | None = None
     if appt is not None:
@@ -425,11 +422,14 @@ async def update_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Sesión no encontrada")
+    # Validar FKs entrantes contra el tenant antes de reasignarlas
+    await assert_owned(db, Space, body.space_id, current_user.tenant_id, "Espacio no encontrado")
+    await assert_owned(db, Instructor, body.instructor_id, current_user.tenant_id, "Instructor no encontrado")
     for field, value in body.model_dump(exclude_unset=True).items():
         setattr(session, field, value)
     await db.commit()
     await db.refresh(session)
-    return await _enrich(session, db)
+    return await _enrich(session, db, current_user.tenant_id)
 
 
 @router.delete("/{session_id}", status_code=200)

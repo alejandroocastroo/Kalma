@@ -482,14 +482,24 @@ async def export_contabilidad(
     client_ids = {p.client_id for p in payments_list if p.client_id}
     client_names: dict[uuid.UUID, str] = {}
     if client_ids:
-        clients_result = await db.execute(select(Client).where(Client.id.in_(list(client_ids))))
+        clients_result = await db.execute(
+            select(Client).where(
+                Client.id.in_(list(client_ids)),
+                Client.tenant_id == current_user.tenant_id,
+            )
+        )
         client_names = {c.id: c.full_name for c in clients_result.scalars().all()}
 
     from app.models.instructor import Instructor as InstructorModel
     instructor_ids = {p.instructor_id for p in payments_list if p.instructor_id}
     instructor_names: dict[uuid.UUID, str] = {}
     if instructor_ids:
-        inst_result = await db.execute(select(InstructorModel).where(InstructorModel.id.in_(list(instructor_ids))))
+        inst_result = await db.execute(
+            select(InstructorModel).where(
+                InstructorModel.id.in_(list(instructor_ids)),
+                InstructorModel.tenant_id == current_user.tenant_id,
+            )
+        )
         instructor_names = {i.id: i.full_name for i in inst_result.scalars().all()}
 
     tenant = await db.get(Tenant, current_user.tenant_id)
