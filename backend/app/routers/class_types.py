@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -47,15 +48,14 @@ async def create_class_type(
 
 @router.put("/{ct_id}", response_model=ClassTypeResponse)
 async def update_class_type(
-    ct_id: str,
+    ct_id: uuid.UUID,
     body: ClassTypeUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    import uuid
     tenant_id = await _get_tenant_id(current_user)
     result = await db.execute(
-        select(ClassType).where(ClassType.id == uuid.UUID(ct_id), ClassType.tenant_id == tenant_id)
+        select(ClassType).where(ClassType.id == ct_id, ClassType.tenant_id == tenant_id)
     )
     ct = result.scalar_one_or_none()
     if not ct:
@@ -69,14 +69,13 @@ async def update_class_type(
 
 @router.delete("/{ct_id}")
 async def delete_class_type(
-    ct_id: str,
+    ct_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    import uuid
     tenant_id = await _get_tenant_id(current_user)
     result = await db.execute(
-        select(ClassType).where(ClassType.id == uuid.UUID(ct_id), ClassType.tenant_id == tenant_id)
+        select(ClassType).where(ClassType.id == ct_id, ClassType.tenant_id == tenant_id)
     )
     ct = result.scalar_one_or_none()
     if not ct:

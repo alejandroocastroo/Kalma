@@ -79,11 +79,11 @@ async def create_plan(
 
 @router.get("/{plan_id}")
 async def get_plan(
-    plan_id: str,
+    plan_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    plan = await db.get(Plan, uuid.UUID(plan_id))
+    plan = await db.get(Plan, plan_id)
     if not plan or plan.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Plan no encontrado")
     return await _enrich_plan(plan, db)
@@ -91,12 +91,12 @@ async def get_plan(
 
 @router.put("/{plan_id}")
 async def update_plan(
-    plan_id: str,
+    plan_id: uuid.UUID,
     body: PlanUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    plan = await db.get(Plan, uuid.UUID(plan_id))
+    plan = await db.get(Plan, plan_id)
     if not plan or plan.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Plan no encontrado")
     data = body.model_dump(exclude_none=True)
@@ -127,11 +127,11 @@ async def update_plan(
 
 @router.delete("/{plan_id}", status_code=204)
 async def delete_plan(
-    plan_id: str,
+    plan_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    plan = await db.get(Plan, uuid.UUID(plan_id))
+    plan = await db.get(Plan, plan_id)
     if not plan or plan.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Plan no encontrado")
 

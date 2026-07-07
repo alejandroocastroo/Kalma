@@ -408,14 +408,14 @@ async def quick_book(
 
 @router.put("/{session_id}", response_model=ClassSessionResponse)
 async def update_session(
-    session_id: str,
+    session_id: uuid.UUID,
     body: ClassSessionUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(ClassSession).where(
-            ClassSession.id == uuid.UUID(session_id),
+            ClassSession.id == session_id,
             ClassSession.tenant_id == current_user.tenant_id,
         )
     )
@@ -434,13 +434,13 @@ async def update_session(
 
 @router.delete("/{session_id}", status_code=200)
 async def delete_session(
-    session_id: str,
+    session_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(ClassSession).where(
-            ClassSession.id == uuid.UUID(session_id),
+            ClassSession.id == session_id,
             ClassSession.tenant_id == current_user.tenant_id,
         )
     )
@@ -463,7 +463,7 @@ class CancelHolidayBody(BaseModel):
 
 @router.post("/{session_id}/cancel-holiday")
 async def cancel_holiday_session(
-    session_id: str,
+    session_id: uuid.UUID,
     body: CancelHolidayBody,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -478,7 +478,7 @@ async def cancel_holiday_session(
 
     result = await db.execute(
         select(ClassSession).where(
-            ClassSession.id == uuid.UUID(session_id),
+            ClassSession.id == session_id,
             ClassSession.tenant_id == current_user.tenant_id,
         )
     )

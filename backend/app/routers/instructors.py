@@ -108,14 +108,14 @@ async def create_instructor(
 
 @router.put("/{instructor_id}")
 async def update_instructor(
-    instructor_id: str,
+    instructor_id: uuid.UUID,
     body: InstructorUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Instructor).where(
-            Instructor.id == uuid.UUID(instructor_id),
+            Instructor.id == instructor_id,
             Instructor.tenant_id == current_user.tenant_id,
         )
     )
@@ -131,13 +131,13 @@ async def update_instructor(
 
 @router.get("/{instructor_id}/sessions")
 async def instructor_sessions(
-    instructor_id: str,
+    instructor_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(ClassSession).where(
-            ClassSession.instructor_id == uuid.UUID(instructor_id),
+            ClassSession.instructor_id == instructor_id,
             ClassSession.tenant_id == current_user.tenant_id,
         ).order_by(ClassSession.start_datetime.desc()).limit(100)
     )

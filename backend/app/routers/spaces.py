@@ -62,7 +62,7 @@ async def create_space(
 
 @router.put("/{space_id}", response_model=SpaceResponse)
 async def update_space(
-    space_id: str,
+    space_id: uuid.UUID,
     body: SpaceUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -71,7 +71,7 @@ async def update_space(
     _require_admin(current_user)
     result = await db.execute(
         select(Space).where(
-            Space.id == uuid.UUID(space_id),
+            Space.id == space_id,
             Space.tenant_id == current_user.tenant_id,
         )
     )
@@ -87,7 +87,7 @@ async def update_space(
 
 @router.delete("/{space_id}")
 async def deactivate_space(
-    space_id: str,
+    space_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -95,7 +95,7 @@ async def deactivate_space(
     _require_admin(current_user)
     result = await db.execute(
         select(Space).where(
-            Space.id == uuid.UUID(space_id),
+            Space.id == space_id,
             Space.tenant_id == current_user.tenant_id,
         )
     )
@@ -128,7 +128,7 @@ async def deactivate_space(
 
 @router.get("/{space_id}/availability", response_model=List[SpaceAvailabilitySlot])
 async def space_availability(
-    space_id: str,
+    space_id: uuid.UUID,
     date_param: str = Query(..., alias="date", description="Fecha en formato YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -137,7 +137,7 @@ async def space_availability(
 
     result = await db.execute(
         select(Space).where(
-            Space.id == uuid.UUID(space_id),
+            Space.id == space_id,
             Space.tenant_id == current_user.tenant_id,
         )
     )

@@ -140,13 +140,13 @@ async def birthdays_two_months(
 
 @router.get("/{client_id}", response_model=ClientResponse)
 async def get_client(
-    client_id: str,
+    client_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Client).where(
-            Client.id == uuid.UUID(client_id),
+            Client.id == client_id,
             Client.tenant_id == current_user.tenant_id,
         )
     )
@@ -158,14 +158,14 @@ async def get_client(
 
 @router.put("/{client_id}", response_model=ClientResponse)
 async def update_client(
-    client_id: str,
+    client_id: uuid.UUID,
     body: ClientUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Client).where(
-            Client.id == uuid.UUID(client_id),
+            Client.id == client_id,
             Client.tenant_id == current_user.tenant_id,
         )
     )
@@ -185,7 +185,7 @@ async def update_client(
 
 @router.get("/{client_id}/appointments")
 async def client_appointments(
-    client_id: str,
+    client_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -201,14 +201,14 @@ async def client_appointments(
         select(Appointment)
         .join(ClassSession, Appointment.class_session_id == ClassSession.id)
         .where(
-            Appointment.client_id == uuid.UUID(client_id),
+            Appointment.client_id == client_id,
             Appointment.tenant_id == current_user.tenant_id,
         )
         .order_by(ClassSession.start_datetime.desc())
         .limit(50)
     )
     appointments = result.scalars().all()
-    client_obj = await get_if_owned(db, Client, uuid.UUID(client_id), current_user.tenant_id)
+    client_obj = await get_if_owned(db, Client, client_id, current_user.tenant_id)
     client_name = client_obj.full_name if client_obj else None
     client_phone = client_obj.phone if client_obj else None
     enriched = []

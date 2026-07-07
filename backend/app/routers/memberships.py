@@ -211,10 +211,10 @@ async def auto_deduct(
 
 @router.get("")
 async def list_memberships(
-    client_id: Optional[str] = None,
+    client_id: Optional[uuid.UUID] = None,
     status: Optional[str] = None,
     search: Optional[str] = Query(None, max_length=100),
-    space_id: Optional[str] = None,
+    space_id: Optional[uuid.UUID] = None,
     sort_by: Optional[str] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
@@ -229,7 +229,7 @@ async def list_memberships(
         .where(ClientMembership.tenant_id == current_user.tenant_id)
     )
     if client_id:
-        base_q = base_q.where(ClientMembership.client_id == uuid.UUID(client_id))
+        base_q = base_q.where(ClientMembership.client_id == client_id)
     if status == 'not_cancelled':
         base_q = base_q.where(ClientMembership.status != 'cancelled')
     elif status:
@@ -237,7 +237,7 @@ async def list_memberships(
     if search:
         base_q = base_q.where(Client.full_name.ilike(f"%{search}%"))
     if space_id:
-        space_uuid = uuid.UUID(space_id)
+        space_uuid = space_id
         base_q = base_q.where(
             or_(
                 Plan.space_id == space_uuid,
@@ -440,11 +440,11 @@ async def create_membership_v2(
 
 @router.get("/{membership_id}")
 async def get_membership(
-    membership_id: str,
+    membership_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
     return await _enrich(m, db)
@@ -456,12 +456,12 @@ class RenewMembershipBody(BaseModel):
 
 @router.post("/{membership_id}/renew")
 async def renew_membership(
-    membership_id: str,
+    membership_id: uuid.UUID,
     body: RenewMembershipBody,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
@@ -516,7 +516,7 @@ async def renew_membership(
 
 @router.put("/{membership_id}")
 async def update_membership(
-    membership_id: str,
+    membership_id: uuid.UUID,
     body: ClientMembershipUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -524,7 +524,7 @@ async def update_membership(
     from app.models.plan import Plan
     from app.utils.membership_calc import calculate_expiry_date, calculate_expiry_date_hybrid
 
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
@@ -573,12 +573,12 @@ async def update_membership(
 
 @router.post("/{membership_id}/add-makeup")
 async def add_makeup(
-    membership_id: str,
+    membership_id: uuid.UUID,
     body: AddMakeupBody,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
     m.makeup_credits += body.credits
@@ -589,13 +589,13 @@ async def add_makeup(
 
 @router.post("/{membership_id}/bonus-sessions")
 async def add_bonus_sessions(
-    membership_id: str,
+    membership_id: uuid.UUID,
     body: AddBonusSessionsBody,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     """Agrega clases adicionales (bonus) a cualquier membresía activa."""
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
     if body.quantity <= 0:
@@ -614,13 +614,13 @@ async def add_bonus_sessions(
 
 @router.post("/{membership_id}/makeups", response_model=MakeupSessionResponse)
 async def create_makeup_session(
-    membership_id: str,
+    membership_id: uuid.UUID,
     body: MakeupSessionCreate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     """Registra una sesión de reposición para la membresía."""
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
@@ -659,18 +659,18 @@ async def create_makeup_session(
 
 @router.put("/{membership_id}/makeups/{makeup_id}", response_model=MakeupSessionResponse)
 async def update_makeup_session(
-    membership_id: str,
-    makeup_id: str,
+    membership_id: uuid.UUID,
+    makeup_id: uuid.UUID,
     body: MakeupSessionCreate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     """Actualiza datos de una sesión de reposición (fecha, estado, notas)."""
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
-    makeup = await db.get(MakeupSession, uuid.UUID(makeup_id))
+    makeup = await db.get(MakeupSession, makeup_id)
     if not makeup or makeup.membership_id != m.id:
         raise HTTPException(404, "Reposición no encontrada")
 
@@ -684,12 +684,12 @@ async def update_makeup_session(
 
 @router.get("/{membership_id}/makeups", response_model=List[MakeupSessionResponse])
 async def list_makeup_sessions(
-    membership_id: str,
+    membership_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     """Lista todas las reposiciones de una membresía."""
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
@@ -707,11 +707,11 @@ async def list_makeup_sessions(
 
 @router.get("/{membership_id}/weekly-stats")
 async def weekly_stats(
-    membership_id: str,
+    membership_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
 
@@ -806,14 +806,14 @@ async def weekly_stats(
 
 @router.post("/{membership_id}/auto-book", response_model=AutoBookResponse)
 async def auto_book_membership(
-    membership_id: str,
+    membership_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     from app.models.class_session import ClassSession
     from app.models.appointment import Appointment
 
-    m = await db.get(ClientMembership, uuid.UUID(membership_id))
+    m = await db.get(ClientMembership, membership_id)
     if not m or m.tenant_id != current_user.tenant_id:
         raise HTTPException(404, "Membresía no encontrada")
     if m.membership_type == "hybrid_monthly":

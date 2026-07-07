@@ -81,7 +81,7 @@ async def create_tenant(
 
 @router.patch("/tenants/{tenant_id}/currency", response_model=TenantResponse)
 async def update_tenant_currency(
-    tenant_id: str,
+    tenant_id: uuid.UUID,
     body: dict,
     db: AsyncSession = Depends(get_db),
     _=Depends(require_superadmin),
@@ -90,7 +90,7 @@ async def update_tenant_currency(
     currency = str(body.get("currency", "")).upper()
     if currency not in _VALID_CURRENCIES:
         raise HTTPException(400, f"Moneda no soportada. Opciones: {', '.join(sorted(_VALID_CURRENCIES))}")
-    tenant = await db.get(Tenant, uuid.UUID(tenant_id))
+    tenant = await db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Tenant no encontrado")
     tenant.currency = currency
@@ -102,7 +102,7 @@ async def update_tenant_currency(
 
 @router.patch("/tenants/{tenant_id}/timezone", response_model=TenantResponse)
 async def update_tenant_timezone(
-    tenant_id: str,
+    tenant_id: uuid.UUID,
     body: dict,
     db: AsyncSession = Depends(get_db),
     _=Depends(require_superadmin),
@@ -111,7 +111,7 @@ async def update_tenant_timezone(
     tz = str(body.get("timezone", "")).strip()
     if not is_valid_timezone(tz):
         raise HTTPException(400, f"Zona horaria '{tz}' no válida (debe ser una zona IANA, ej. America/Mexico_City)")
-    tenant = await db.get(Tenant, uuid.UUID(tenant_id))
+    tenant = await db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Tenant no encontrado")
     tenant.timezone = tz
@@ -123,11 +123,11 @@ async def update_tenant_timezone(
 
 @router.patch("/tenants/{tenant_id}/toggle", response_model=TenantResponse)
 async def toggle_tenant(
-    tenant_id: str,
+    tenant_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     _=Depends(require_superadmin),
 ):
-    tenant = await db.get(Tenant, uuid.UUID(tenant_id))
+    tenant = await db.get(Tenant, tenant_id)
     if not tenant:
         raise HTTPException(404, "Tenant no encontrado")
     tenant.is_active = not tenant.is_active
@@ -139,11 +139,11 @@ async def toggle_tenant(
 
 @router.get("/tenants/{tenant_id}/stats")
 async def tenant_stats(
-    tenant_id: str,
+    tenant_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     _=Depends(require_superadmin),
 ):
-    tid = uuid.UUID(tenant_id)
+    tid = tenant_id
     users = (await db.execute(select(func.count()).where(User.tenant_id == tid))).scalar()
     clients = (await db.execute(select(func.count()).where(Client.tenant_id == tid))).scalar()
     sessions = (await db.execute(select(func.count()).where(ClassSession.tenant_id == tid))).scalar()

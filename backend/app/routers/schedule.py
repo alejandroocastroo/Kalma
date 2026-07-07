@@ -199,7 +199,7 @@ async def create_exception(
 
 @router.delete("/exceptions/{exception_id}")
 async def delete_exception(
-    exception_id: str,
+    exception_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -209,7 +209,7 @@ async def delete_exception(
 
     result = await db.execute(
         select(ScheduleException).where(
-            ScheduleException.id == uuid.UUID(exception_id),
+            ScheduleException.id == exception_id,
             ScheduleException.tenant_id == current_user.tenant_id,
         )
     )

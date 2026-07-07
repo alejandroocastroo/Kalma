@@ -45,7 +45,7 @@ async def _get_space_or_404(space_id: uuid.UUID, tenant_id: uuid.UUID, db: Async
 
 @router.get("/revenue", response_model=List[RevenueReport])
 async def revenue_by_space(
-    space_id: Optional[str] = Query(None, description="UUID del espacio. Si se omite, agrega todos los espacios."),
+    space_id: Optional[uuid.UUID] = Query(None, description="UUID del espacio. Si se omite, agrega todos los espacios."),
     from_date: str = Query(..., alias="from", description="Fecha inicio YYYY-MM-DD"),
     to_date: str = Query(..., alias="to", description="Fecha fin YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
@@ -59,7 +59,7 @@ async def revenue_by_space(
 
     if space_id:
         # Single space
-        space = await _get_space_or_404(uuid.UUID(space_id), current_user.tenant_id, db)
+        space = await _get_space_or_404(space_id, current_user.tenant_id, db)
         spaces_to_report = [space]
     else:
         # All active spaces for this tenant
@@ -119,7 +119,7 @@ async def revenue_by_space(
 
 @router.get("/occupancy", response_model=List[OccupancyReport])
 async def occupancy_by_space(
-    space_id: Optional[str] = Query(None, description="UUID del espacio. Si se omite, agrega todos los espacios."),
+    space_id: Optional[uuid.UUID] = Query(None, description="UUID del espacio. Si se omite, agrega todos los espacios."),
     from_date: str = Query(..., alias="from", description="Fecha inicio YYYY-MM-DD"),
     to_date: str = Query(..., alias="to", description="Fecha fin YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
@@ -132,7 +132,7 @@ async def occupancy_by_space(
     start, end = day_window_utc(d_from, d_to, tz)
 
     if space_id:
-        space = await _get_space_or_404(uuid.UUID(space_id), current_user.tenant_id, db)
+        space = await _get_space_or_404(space_id, current_user.tenant_id, db)
         spaces_to_report = [space]
     else:
         result = await db.execute(

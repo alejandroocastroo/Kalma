@@ -38,7 +38,7 @@ async def list_payments(
     start: Optional[str] = None,
     end: Optional[str] = None,
     type: Optional[str] = None,
-    space_id: Optional[str] = None,
+    space_id: Optional[uuid.UUID] = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -52,7 +52,7 @@ async def list_payments(
     if type:
         q = q.where(Payment.type == type)
     if space_id:
-        q = q.where(Payment.space_id == uuid.UUID(space_id))
+        q = q.where(Payment.space_id == space_id)
     result = await db.execute(q.order_by(Payment.payment_date.desc()))
     payments = result.scalars().all()
     return [await _enrich(p, db, current_user.tenant_id) for p in payments]
@@ -151,14 +151,14 @@ async def create_payment(
 
 @router.put("/{payment_id}", response_model=PaymentResponse)
 async def update_payment(
-    payment_id: str,
+    payment_id: uuid.UUID,
     body: PaymentUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Payment).where(
-            Payment.id == uuid.UUID(payment_id),
+            Payment.id == payment_id,
             Payment.tenant_id == current_user.tenant_id,
         )
     )
@@ -177,13 +177,13 @@ async def update_payment(
 
 @router.delete("/{payment_id}")
 async def delete_payment(
-    payment_id: str,
+    payment_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Payment).where(
-            Payment.id == uuid.UUID(payment_id),
+            Payment.id == payment_id,
             Payment.tenant_id == current_user.tenant_id,
         )
     )

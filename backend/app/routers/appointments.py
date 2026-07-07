@@ -43,7 +43,7 @@ async def _enrich(appt: Appointment, db: AsyncSession, tenant_id: uuid.UUID) -> 
 
 @router.get("", response_model=list[AppointmentResponse])
 async def list_appointments(
-    session_id: Optional[str] = None,
+    session_id: Optional[uuid.UUID] = None,
     date: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
@@ -52,7 +52,7 @@ async def list_appointments(
         raise HTTPException(403, "Sin tenant")
     q = select(Appointment).where(Appointment.tenant_id == current_user.tenant_id)
     if session_id:
-        q = q.where(Appointment.class_session_id == uuid.UUID(session_id))
+        q = q.where(Appointment.class_session_id == session_id)
     result = await db.execute(q.order_by(Appointment.created_at.desc()))
     appointments = result.scalars().all()
     return [await _enrich(a, db, current_user.tenant_id) for a in appointments]
@@ -101,14 +101,14 @@ async def create_appointment(
 
 @router.put("/{appt_id}", response_model=AppointmentResponse)
 async def update_appointment(
-    appt_id: str,
+    appt_id: uuid.UUID,
     body: AppointmentUpdate,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Appointment).where(
-            Appointment.id == uuid.UUID(appt_id),
+            Appointment.id == appt_id,
             Appointment.tenant_id == current_user.tenant_id,
         )
     )
@@ -124,13 +124,13 @@ async def update_appointment(
 
 @router.delete("/{appt_id}", status_code=200)
 async def delete_appointment(
-    appt_id: str,
+    appt_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Appointment).where(
-            Appointment.id == uuid.UUID(appt_id),
+            Appointment.id == appt_id,
             Appointment.tenant_id == current_user.tenant_id,
         )
     )
@@ -155,13 +155,13 @@ async def delete_appointment(
 
 @router.post("/{appt_id}/attend")
 async def mark_attended(
-    appt_id: str,
+    appt_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Appointment).where(
-            Appointment.id == uuid.UUID(appt_id),
+            Appointment.id == appt_id,
             Appointment.tenant_id == current_user.tenant_id,
         )
     )
@@ -179,13 +179,13 @@ async def mark_attended(
 
 @router.post("/{appt_id}/cancel")
 async def cancel_appointment(
-    appt_id: str,
+    appt_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
     result = await db.execute(
         select(Appointment).where(
-            Appointment.id == uuid.UUID(appt_id),
+            Appointment.id == appt_id,
             Appointment.tenant_id == current_user.tenant_id,
         )
     )
@@ -209,10 +209,10 @@ async def cancel_appointment(
 
 
 @router.post("/{appt_id}/confirm-whatsapp")
-async def confirm_whatsapp(appt_id: str, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_active_user)):
+async def confirm_whatsapp(appt_id: uuid.UUID, db: AsyncSession = Depends(get_db), current_user=Depends(get_current_active_user)):
     # Placeholder - integrar con WhatsApp Business API
     result = await db.execute(
-        select(Appointment).where(Appointment.id == uuid.UUID(appt_id), Appointment.tenant_id == current_user.tenant_id)
+        select(Appointment).where(Appointment.id == appt_id, Appointment.tenant_id == current_user.tenant_id)
     )
     appt = result.scalar_one_or_none()
     if not appt:
