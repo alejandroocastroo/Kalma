@@ -76,7 +76,9 @@ def _slug_match(space_name: str, slug: str) -> bool:
 
 
 @router.get("/{slug}/schedule")
+@limiter.limit("60/minute")
 async def public_schedule(
+    request: Request,
     slug: str,
     start: Optional[str] = None,
     end: Optional[str] = None,
