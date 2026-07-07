@@ -14,6 +14,7 @@ from app.models.class_session import ClassSession
 from app.models.space import Space
 from app.models.client import Client
 from app.models.appointment import Appointment
+from app.utils.booking import reserve_seat
 
 router = APIRouter(prefix="/public", tags=["Público"])
 
@@ -188,8 +189,6 @@ async def public_book(request: Request, slug: str, body: PublicBookingRequest, d
     session = await db.get(ClassSession, uuid_lib.UUID(body.class_session_id))
     if not session or session.tenant_id != tenant.id:
         raise HTTPException(404, "Sesión no encontrada")
-    if session.enrolled_count >= session.capacity:
-        raise HTTPException(400, "La sesión está llena")
 
     # Find or create client
     client_result = await db.execute(
@@ -206,7 +205,8 @@ async def public_book(request: Request, slug: str, body: PublicBookingRequest, d
         db.add(client)
         await db.flush()
 
-    # Check for existing appointment
+    # Check for existing appointment (antes de tocar el cupo, para que un
+    # reenvío del mismo cliente no consuma un asiento)
     existing = await db.execute(
         select(Appointment).where(
             Appointment.class_session_id == session.id,
@@ -216,6 +216,11 @@ async def public_book(request: Request, slug: str, body: PublicBookingRequest, d
     if existing.scalar_one_or_none():
         raise HTTPException(400, "Ya tienes una reserva en esta sesión")
 
+    # Reserva atómica de cupo (evita overbooking por concurrencia — crítico
+    # aquí porque es el widget público y llegan reservas simultáneas)
+    if not await reserve_seat(db, session.id, tenant.id):
+        raise HTTPException(400, "La sesión está llena")
+
     appointment = Appointment(
         tenant_id=tenant.id,
         class_session_id=session.id,
@@ -223,7 +228,6 @@ async def public_book(request: Request, slug: str, body: PublicBookingRequest, d
         status="confirmed",
     )
     db.add(appointment)
-    session.enrolled_count += 1
     await db.commit()
 
     return {

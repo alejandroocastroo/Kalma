@@ -155,8 +155,10 @@ function MakeupDialogContent({
   isPending: boolean
   onClose: () => void
 }) {
-  const today = new Date().toISOString().slice(0, 10)
-  const thirtyDaysAhead = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+  // Rango en la zona horaria del tenant (no la del navegador ni UTC): entre las
+  // 7pm y medianoche en Bogotá, toISOString() daría "mañana" y perdería sesiones.
+  const today = formatInTenantTz(new Date().toISOString(), 'yyyy-MM-dd')
+  const thirtyDaysAhead = formatInTenantTz(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(), 'yyyy-MM-dd')
 
   const { data: availableSessions = [], isLoading: loadingSessions } = useQuery<ClassSession[]>({
     queryKey: ['class-sessions-makeup', today, thirtyDaysAhead],

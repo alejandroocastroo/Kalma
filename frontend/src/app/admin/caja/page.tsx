@@ -8,7 +8,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatsCard } from '@/components/admin/stats-card'
-import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels } from '@/lib/utils'
+import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels, tenantToday } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
 import { DollarSign, TrendingUp, TrendingDown, Plus, Trash2, FileSpreadsheet, Settings2 } from 'lucide-react'
@@ -19,7 +19,7 @@ import type { Space, Instructor, Client, PaginatedResponse } from '@/types'
 const PERIOD_DAY_KEY = 'caja_period_start_day'
 
 function getPeriodDates(startDay: number): { start: string; end: string } {
-  const today = new Date()
+  const today = tenantToday()
   const d = today.getDate()
   let periodStart: Date
   let periodEnd: Date
@@ -70,8 +70,8 @@ const EXPENSE_CATEGORIES = [
 
 export default function CajaPage() {
   const currency = getTenantCurrency()
-  const [startDate, setStartDate] = useState(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'))
-  const [endDate, setEndDate] = useState(() => format(endOfMonth(new Date()), 'yyyy-MM-dd'))
+  const [startDate, setStartDate] = useState(() => format(startOfMonth(tenantToday()), 'yyyy-MM-dd'))
+  const [endDate, setEndDate] = useState(() => format(endOfMonth(tenantToday()), 'yyyy-MM-dd'))
   const [periodStartDay, setPeriodStartDay] = useState(1)
 
   useEffect(() => {

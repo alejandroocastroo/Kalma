@@ -28,6 +28,7 @@ from app.utils.membership_calc import (
 )
 from app.utils.attendance import apply_attendance
 from app.utils.ownership import assert_owned, get_if_owned
+from app.utils.booking import reserve_seat
 from app.models.space import Space
 
 router = APIRouter(prefix="/memberships", tags=["Membresías"])
@@ -902,7 +903,8 @@ async def auto_book_membership(
         if session.id in existing_session_ids:
             skipped += 1
             continue
-        if session.enrolled_count >= session.capacity:
+        # Reserva atómica de cupo (evita overbooking por concurrencia)
+        if not await reserve_seat(db, session.id, current_user.tenant_id):
             skipped += 1
             continue
         appt = Appointment(
@@ -913,7 +915,6 @@ async def auto_book_membership(
             paid=False,
         )
         db.add(appt)
-        session.enrolled_count += 1
         booked += 1
         booked_dates.append(session.start_datetime.isoformat())
 

@@ -1,16 +1,17 @@
 import json
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
+from sqlalchemy import select, text
 
 from app.database import get_db
 from app.auth.jwt import get_current_active_user
 from app.schemas.space import SpaceCreate, SpaceUpdate, SpaceResponse, SpaceAvailabilitySlot
 from app.models.space import Space
 from app.models.class_session import ClassSession
+from app.utils.timezone import get_tenant_zoneinfo, day_window_utc
 
 router = APIRouter(prefix="/spaces", tags=["Espacios"])
 
@@ -128,7 +129,7 @@ async def deactivate_space(
 @router.get("/{space_id}/availability", response_model=List[SpaceAvailabilitySlot])
 async def space_availability(
     space_id: str,
-    date: str = Query(..., description="Fecha en formato YYYY-MM-DD"),
+    date_param: str = Query(..., alias="date", description="Fecha en formato YYYY-MM-DD"),
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
@@ -144,7 +145,14 @@ async def space_availability(
     if not space:
         raise HTTPException(404, "Espacio no encontrado")
 
-    target_date = datetime.fromisoformat(date).date()
+    try:
+        target_date = date.fromisoformat(date_param)
+    except ValueError:
+        raise HTTPException(400, "Fecha inválida (formato esperado YYYY-MM-DD)")
+
+    # Ventana UTC que cubre ese día completo en la zona horaria del tenant
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+    day_start, day_end = day_window_utc(target_date, target_date, tz)
 
     # Fetch all non-cancelled sessions for this space on the given date in one query
     sessions_result = await db.execute(
@@ -152,7 +160,8 @@ async def space_availability(
             ClassSession.space_id == space.id,
             ClassSession.tenant_id == current_user.tenant_id,
             ClassSession.status != "cancelled",
-            func.date(ClassSession.start_datetime) == target_date,
+            ClassSession.start_datetime >= day_start,
+            ClassSession.start_datetime <= day_end,
         )
     )
     sessions = sessions_result.scalars().all()
@@ -160,8 +169,8 @@ async def space_availability(
     # Build a mapping from hour -> count of sessions starting in that hour
     bookings_by_hour: dict[int, int] = {}
     for s in sessions:
-        # Convert to local naive hour (start_datetime stored as UTC-aware)
-        hour = s.start_datetime.hour
+        # Hora de pared en la zona del tenant (start_datetime se almacena en UTC)
+        hour = s.start_datetime.astimezone(tz).hour
         bookings_by_hour[hour] = bookings_by_hour.get(hour, 0) + 1
 
     slots: List[SpaceAvailabilitySlot] = []

@@ -20,6 +20,7 @@ from app.models.space import Space
 from app.utils.attendance import apply_attendance, revert_attendance
 from app.utils.timezone import get_tenant_zoneinfo, tenant_today, local_date_of
 from app.utils.ownership import assert_owned, get_if_owned
+from app.utils.booking import reserve_seat
 
 router = APIRouter(prefix="/appointments", tags=["Citas"])
 
@@ -71,7 +72,8 @@ async def create_appointment(
         raise HTTPException(404, "Sesión no encontrada")
     # Validar que el cliente pertenezca al tenant (evita fuga cross-tenant de PII/salud)
     await assert_owned(db, Client, body.client_id, current_user.tenant_id, "Cliente no encontrado")
-    if session.enrolled_count >= session.capacity:
+    # Reserva atómica de cupo (evita overbooking por concurrencia)
+    if not await reserve_seat(db, session.id, current_user.tenant_id):
         raise HTTPException(400, "La sesión está llena")
 
     appt_data = body.model_dump()
@@ -83,7 +85,7 @@ async def create_appointment(
 
     appt = Appointment(tenant_id=current_user.tenant_id, **appt_data)
     db.add(appt)
-    session.enrolled_count += 1
+    # (el incremento de enrolled_count ya lo hizo reserve_seat de forma atómica)
 
     if session_is_past:
         client = await db.get(Client, appt.client_id)
@@ -141,6 +143,11 @@ async def delete_appointment(
             session.enrolled_count -= 1
     if appt.status == "attended":
         await revert_attendance(db, appt)
+        # Revertir también el contador de visitas del cliente (se incrementó al
+        # marcar asistencia); si no, quedaría inflado permanentemente.
+        client = await db.get(Client, appt.client_id)
+        if client and (client.total_sessions or 0) > 0:
+            client.total_sessions -= 1
     await db.delete(appt)
     await db.commit()
     return {"message": "Cliente eliminado de la sesión"}
@@ -193,6 +200,10 @@ async def cancel_appointment(
             session.enrolled_count -= 1
         if was_attended:
             await revert_attendance(db, appt)
+            # Revertir el contador de visitas del cliente (inverso de mark_attended)
+            client = await db.get(Client, appt.client_id)
+            if client and (client.total_sessions or 0) > 0:
+                client.total_sessions -= 1
     await db.commit()
     return {"message": "Cita cancelada"}
 

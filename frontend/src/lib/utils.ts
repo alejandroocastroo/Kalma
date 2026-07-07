@@ -107,6 +107,16 @@ export function formatInTenantTz(dateStr: string, fmt: string): string {
   }
 }
 
+// Devuelve "hoy" en la zona horaria del tenant como un Date con los componentes
+// de calendario (año/mes/día) correctos a medianoche local del navegador.
+// Usar en vez de `new Date()` cuando se calculan rangos de fechas (mes actual,
+// período de caja, etc.), para que no dependan de la zona del navegador del admin.
+export function tenantToday(): Date {
+  const iso = formatInTenantTz(new Date().toISOString(), 'yyyy-MM-dd') // "2026-07-06"
+  const [year, month, day] = iso.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 export function getInitials(name: string): string {
   return name
     .split(' ')

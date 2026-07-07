@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -12,7 +12,7 @@ from app.schemas.reports import RevenueReport, OccupancyReport
 from app.models.space import Space
 from app.models.class_session import ClassSession
 from app.models.appointment import Appointment
-from app.utils.timezone import get_tenant_zoneinfo, parse_local_to_utc
+from app.utils.timezone import get_tenant_zoneinfo, day_window_utc
 
 router = APIRouter(prefix="/reports", tags=["Reportes"])
 
@@ -20,6 +20,14 @@ router = APIRouter(prefix="/reports", tags=["Reportes"])
 def _require_tenant(current_user) -> None:
     if not current_user.tenant_id:
         raise HTTPException(403, "Sin tenant")
+
+
+def _parse_range(from_date: str, to_date: str) -> tuple[date, date]:
+    """Parsea el rango de fechas del query; 400 si el formato es inválido."""
+    try:
+        return date.fromisoformat(from_date), date.fromisoformat(to_date)
+    except ValueError:
+        raise HTTPException(400, "Fecha inválida (formato esperado YYYY-MM-DD)")
 
 
 async def _get_space_or_404(space_id: uuid.UUID, tenant_id: uuid.UUID, db: AsyncSession) -> Space:
@@ -46,8 +54,8 @@ async def revenue_by_space(
     _require_tenant(current_user)
 
     tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
-    start = parse_local_to_utc(from_date, tz)
-    end = parse_local_to_utc(to_date, tz)
+    d_from, d_to = _parse_range(from_date, to_date)
+    start, end = day_window_utc(d_from, d_to, tz)
 
     if space_id:
         # Single space
@@ -120,8 +128,8 @@ async def occupancy_by_space(
     _require_tenant(current_user)
 
     tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
-    start = parse_local_to_utc(from_date, tz)
-    end = parse_local_to_utc(to_date, tz)
+    d_from, d_to = _parse_range(from_date, to_date)
+    start, end = day_window_utc(d_from, d_to, tz)
 
     if space_id:
         space = await _get_space_or_404(uuid.UUID(space_id), current_user.tenant_id, db)

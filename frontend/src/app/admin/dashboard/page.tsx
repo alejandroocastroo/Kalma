@@ -4,7 +4,7 @@ import { classSessions, payments, clients, appointments, reports } from '@/lib/a
 import { StatsCard } from '@/components/admin/stats-card'
 import { SessionCard } from '@/components/admin/session-card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatCurrency, formatDateTime, formatInTenantTz, appointmentStatusConfig, getInitials } from '@/lib/utils'
+import { formatCurrency, formatDateTime, formatInTenantTz, appointmentStatusConfig, getInitials, tenantToday } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { Badge } from '@/components/ui/badge'
 import { Calendar, Users, DollarSign, TrendingUp, Plus, Cake } from 'lucide-react'
@@ -16,7 +16,7 @@ const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','ago
 
 export default function DashboardPage() {
   const currency = getTenantCurrency()
-  const today = new Date()
+  const today = tenantToday()
   const monthStart = format(startOfMonth(today), 'yyyy-MM-dd')
   const monthEnd = format(endOfMonth(today), 'yyyy-MM-dd')
 
