@@ -65,16 +65,6 @@ function wallTimeToUtc(naive: string): Date {
   return fromZonedTime(naive, getTenantTimezone())
 }
 
-// Hora local (0–23) de un instante UTC, vista en la zona del tenant.
-function tenantHour(utcIso: string): number {
-  return toZonedTime(parseISO(utcIso), getTenantTimezone()).getHours()
-}
-
-// ¿El instante UTC cae, en hora del tenant, en el mismo día calendario que `day`?
-function isSameTenantDay(utcIso: string, day: Date): boolean {
-  return isSameDay(toZonedTime(parseISO(utcIso), getTenantTimezone()), day)
-}
-
 // ─── QuickBookModal ───────────────────────────────────────────────────────────
 interface QuickBookModalProps {
   day: Date
@@ -808,12 +798,31 @@ export default function AgendaPage() {
   const typedSessions = sessions as SessionWithSpace[]
 
   // Apply space filter — sessions without space_id are shown in all views
-  const filteredSessions =
-    spaceFilter === 'all'
-      ? typedSessions
-      : typedSessions.filter((s) =>
-          spaceFilter === 'none' ? !s.space_id : s.space_id === spaceFilter
-        )
+  const filteredSessions = useMemo(
+    () =>
+      spaceFilter === 'all'
+        ? typedSessions
+        : typedSessions.filter((s) =>
+            spaceFilter === 'none' ? !s.space_id : s.space_id === spaceFilter
+          ),
+    [typedSessions, spaceFilter]
+  )
+
+  // Agrupa las sesiones una sola vez por (día local, hora local) del tenant, para
+  // que cada celda de la grilla haga un lookup O(1) en vez de recorrer y convertir
+  // zona horaria de TODAS las sesiones en cada una de las 126 celdas por render.
+  const sessionsByDayHour = useMemo(() => {
+    const tz = getTenantTimezone()
+    const map = new Map<string, SessionWithSpace[]>()
+    for (const s of filteredSessions) {
+      const local = toZonedTime(parseISO(s.start_datetime), tz)
+      const key = `${format(local, 'yyyy-MM-dd')}-${local.getHours()}`
+      const bucket = map.get(key)
+      if (bucket) bucket.push(s)
+      else map.set(key, [s])
+    }
+    return map
+  }, [filteredSessions])
 
   // Assign a distinct color per space for left border differentiation
   const SPACE_COLORS = [
@@ -992,9 +1001,6 @@ export default function AgendaPage() {
     doAddClient(client, false)
   }
 
-  const getSessionsForDay = (day: Date) =>
-    filteredSessions.filter((s) => isSameTenantDay(s.start_datetime, day))
-
   return (
     <div className="space-y-4">
       {/* Space filter tabs */}
@@ -1122,10 +1128,7 @@ export default function AgendaPage() {
                 {hour}:00
               </div>
               {weekDays.map((day) => {
-                const daySessions = getSessionsForDay(day).filter((s) => {
-                  const sessionHour = tenantHour(s.start_datetime)
-                  return sessionHour === hour
-                })
+                const daySessions = sessionsByDayHour.get(`${format(day, 'yyyy-MM-dd')}-${hour}`) ?? []
                 return (
                   // The cell itself is clickable — opens the quick-book modal.
                   // Individual session cards use stopPropagation to open the detail modal instead.

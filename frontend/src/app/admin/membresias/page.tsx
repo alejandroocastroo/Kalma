@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { ErrorBanner } from '@/components/admin/error-banner'
 
 type StatusFilter = 'all' | 'active' | 'paused' | 'cancelled'
 
@@ -305,6 +306,7 @@ export default function MembresiasPage() {
   const currency = getTenantCurrency()
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [spaceFilter, setSpaceFilter] = useState('')
   const [page, setPage] = useState(1)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -342,8 +344,19 @@ export default function MembresiasPage() {
   })
   // Client search autocomplete
   const [clientSearch, setClientSearch] = useState('')
+  const [debouncedClientSearch, setDebouncedClientSearch] = useState('')
   const [clientDropdownOpen, setClientDropdownOpen] = useState(false)
   const [selectedClientName, setSelectedClientName] = useState('')
+
+  // Debounce de ambos buscadores: evita un request por cada tecla
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedClientSearch(clientSearch), 300)
+    return () => clearTimeout(t)
+  }, [clientSearch])
 
   // Auto-deduct on mount — throttled to once every 10 min to avoid DB writes on every visit
   useEffect(() => {
@@ -356,11 +369,11 @@ export default function MembresiasPage() {
       .catch(() => {})
   }, [])
 
-  const { data: membershipsData, isLoading } = useQuery({
-    queryKey: ['memberships', statusFilter, search, spaceFilter, page],
+  const { data: membershipsData, isLoading, isError } = useQuery({
+    queryKey: ['memberships', statusFilter, debouncedSearch, spaceFilter, page],
     queryFn: () => memberships.list({
       status: statusFilter !== 'all' ? statusFilter : 'not_cancelled',
-      search: search || undefined,
+      search: debouncedSearch || undefined,
       space_id: spaceFilter || undefined,
       sort_by: statusFilter === 'active' ? 'fullness' : undefined,
       page,
@@ -381,8 +394,8 @@ export default function MembresiasPage() {
   })
 
   const { data: clientSearchResults = [] } = useQuery<Client[]>({
-    queryKey: ['clients-search', clientSearch],
-    queryFn: () => clientsApi.list({ search: clientSearch || undefined, limit: 20 }).then(r => r.items),
+    queryKey: ['clients-search', debouncedClientSearch],
+    queryFn: () => clientsApi.list({ search: debouncedClientSearch || undefined, limit: 20 }).then(r => r.items),
     enabled: clientDropdownOpen,
   })
   const plansList: Plan[] = plansData ?? []
@@ -719,6 +732,12 @@ export default function MembresiasPage() {
 
   return (
     <div className="space-y-6">
+      {isError && (
+        <ErrorBanner
+          message="No se pudieron cargar las membresías."
+          onRetry={() => qc.invalidateQueries({ queryKey: ['memberships'] })}
+        />
+      )}
       {/* Header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-2">

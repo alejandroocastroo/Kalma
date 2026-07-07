@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clients, appointments as appointmentsApi } from '@/lib/api'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
+import { ErrorBanner } from '@/components/admin/error-banner'
 import { getInitials, formatDate, formatTime, appointmentStatusConfig } from '@/lib/utils'
 import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X, MapPin } from 'lucide-react'
 import { toast } from 'sonner'
@@ -22,6 +23,7 @@ function formatBirthDate(birth_date: string): string {
 
 export default function ClientesPage() {
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
   const [showForm, setShowForm] = useState(false)
@@ -29,10 +31,16 @@ export default function ClientesPage() {
   const [editMode, setEditMode] = useState(false)
   const qc = useQueryClient()
 
-  const { data, isLoading } = useQuery({
-    queryKey: ['clients', search, page, statusFilter],
+  // Debounce: evita un request por cada tecla; consulta 300ms tras dejar de escribir
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['clients', debouncedSearch, page, statusFilter],
     queryFn: () => clients.list({
-      search,
+      search: debouncedSearch,
       page,
       limit: 15,
       is_active: statusFilter === 'active' ? true : statusFilter === 'inactive' ? false : undefined,
@@ -59,6 +67,13 @@ export default function ClientesPage() {
 
   return (
     <div className="space-y-4">
+      {isError && (
+        <ErrorBanner
+          message="No se pudieron cargar los clientes."
+          onRetry={() => qc.invalidateQueries({ queryKey: ['clients'] })}
+        />
+      )}
+
       {/* Birthday section */}
       {birthdayClients.length > 0 && (
         <BirthdaySection clients={birthdayClients} />

@@ -8,6 +8,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { StatsCard } from '@/components/admin/stats-card'
+import { ErrorBanner } from '@/components/admin/error-banner'
 import { formatCurrency, getCurrencyLocale, categoryLabels, paymentMethodLabels, tenantToday } from '@/lib/utils'
 import { getTenantCurrency } from '@/lib/auth'
 import { format, startOfMonth, endOfMonth } from 'date-fns'
@@ -106,7 +107,7 @@ export default function CajaPage() {
 
   const params = { start: startDate, end: endDate }
 
-  const { data: paymentList = [], isLoading } = useQuery({
+  const { data: paymentList = [], isLoading, isError } = useQuery({
     queryKey: ['payments', params],
     queryFn: () => payments.list(params),
   })
@@ -194,6 +195,12 @@ export default function CajaPage() {
 
   return (
     <div className="space-y-6">
+      {isError && (
+        <ErrorBanner
+          message="No se pudieron cargar los movimientos de caja."
+          onRetry={() => qc.invalidateQueries({ queryKey: ['payments'] })}
+        />
+      )}
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
