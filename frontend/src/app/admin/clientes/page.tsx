@@ -109,9 +109,9 @@ export default function ClientesPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Cliente</TableHead>
+              <TableHead>Membresía</TableHead>
               <TableHead>Teléfono</TableHead>
               <TableHead>Email</TableHead>
-              <TableHead>Membresía</TableHead>
               <TableHead>Estado</TableHead>
             </TableRow>
           </TableHeader>
@@ -135,11 +135,9 @@ export default function ClientesPage() {
                         <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center text-primary-700 text-xs font-semibold">
                           {getInitials(client.full_name)}
                         </div>
-                        <span className="font-medium text-gray-900">{client.full_name}</span>
+                        <span className="text-base font-semibold text-gray-900">{client.full_name}</span>
                       </div>
                     </TableCell>
-                    <TableCell className="text-gray-500">{client.phone || '—'}</TableCell>
-                    <TableCell className="text-gray-500 text-sm">{client.email || '—'}</TableCell>
                     <TableCell>
                       {client.active_plan_name ? (
                         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-full px-2.5 py-0.5">
@@ -149,6 +147,8 @@ export default function ClientesPage() {
                         <span className="text-xs text-gray-400">Sin plan</span>
                       )}
                     </TableCell>
+                    <TableCell className="text-gray-500">{client.phone || '—'}</TableCell>
+                    <TableCell className="text-gray-500 text-sm">{client.email || '—'}</TableCell>
                     <TableCell>
                       <Badge variant={client.is_active ? 'success' : 'secondary'}>
                         {client.is_active ? 'Activo' : 'Inactivo'}
