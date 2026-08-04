@@ -15,6 +15,11 @@ from app.models.client import Client
 from app.models.client_membership import ClientMembership
 from app.models.plan import Plan
 from app.utils.timezone import get_tenant_zoneinfo, tenant_today
+from app.models.appointment import Appointment
+from app.models.class_session import ClassSession
+from app.models.class_type import ClassType
+from app.models.space import Space
+from app.utils.ownership import get_if_owned
 
 router = APIRouter(prefix="/clients", tags=["Clientes"])
 
@@ -183,18 +188,123 @@ async def update_client(
     return client
 
 
+@router.get("/{client_id}/summary")
+async def client_summary(
+    client_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user=Depends(get_current_active_user),
+):
+    """Resumen completo del cliente: datos, membresía activa e historial de asistencia."""
+    client_obj = await get_if_owned(db, Client, client_id, current_user.tenant_id)
+    if not client_obj:
+        raise HTTPException(404, "Cliente no encontrado")
+
+    tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
+
+    # Membresía activa
+    mem_result = await db.execute(
+        select(ClientMembership)
+        .where(
+            ClientMembership.client_id == client_id,
+            ClientMembership.tenant_id == current_user.tenant_id,
+            ClientMembership.status == "active",
+        )
+        .order_by(ClientMembership.created_at.desc())
+        .limit(1)
+    )
+    membership = mem_result.scalar_one_or_none()
+    membership_data = None
+    if membership:
+        plan = await db.get(Plan, membership.plan_id)
+        membership_data = {
+            "id": str(membership.id),
+            "plan_name": plan.name if plan else None,
+            "membership_type": membership.membership_type,
+            "start_date": membership.start_date.isoformat() if membership.start_date else None,
+            "end_date": membership.end_date.isoformat() if membership.end_date else None,
+            "expiry_date": membership.expiry_date.isoformat() if membership.expiry_date else None,
+            "next_billing_date": membership.next_billing_date.isoformat() if membership.next_billing_date else None,
+            "billing_day": membership.billing_day,
+            "sessions_per_week": membership.sessions_per_week,
+            "total_sessions": membership.total_sessions,
+            "sessions_used": membership.sessions_used,
+            "bonus_sessions": membership.bonus_sessions or 0,
+            "sessions_remaining": (
+                membership.total_sessions + (membership.bonus_sessions or 0) - (membership.sessions_used or 0)
+                if membership.total_sessions is not None else None
+            ),
+            "makeups_allowed": membership.makeups_allowed,
+            "makeups_used": membership.makeups_used,
+            "makeup_credits": membership.makeup_credits,
+            "scheduled_days": membership.scheduled_days,
+            "notes": membership.notes,
+        }
+
+    # Historial de asistencia (últimas 30 citas asistidas o confirmadas)
+    appts_result = await db.execute(
+        select(Appointment)
+        .join(ClassSession, Appointment.class_session_id == ClassSession.id)
+        .where(
+            Appointment.client_id == client_id,
+            Appointment.tenant_id == current_user.tenant_id,
+            Appointment.status.in_(["attended", "confirmed", "no_show"]),
+        )
+        .order_by(ClassSession.start_datetime.desc())
+        .limit(30)
+    )
+    appointments = appts_result.scalars().all()
+
+    enriched_appts = []
+    for appt in appointments:
+        session = await db.get(ClassSession, appt.class_session_id)
+        ct_name = None
+        space_name = None
+        session_start_local = None
+        if session:
+            if session.class_type_id:
+                ct = await db.get(ClassType, session.class_type_id)
+                ct_name = ct.name if ct else None
+            if session.space_id:
+                space = await db.get(Space, session.space_id)
+                space_name = space.name if space else None
+                if not ct_name:
+                    ct_name = space_name
+            if session.start_datetime:
+                local_dt = session.start_datetime.astimezone(tz)
+                session_start_local = local_dt.strftime("%Y-%m-%dT%H:%M:%S")
+        enriched_appts.append({
+            "status": appt.status,
+            "session_start": session_start_local,
+            "class_type_name": ct_name,
+            "space_name": space_name,
+            "notes": appt.notes,
+        })
+
+    return {
+        "client": {
+            "id": str(client_obj.id),
+            "full_name": client_obj.full_name,
+            "email": client_obj.email,
+            "phone": client_obj.phone,
+            "document_type": client_obj.document_type,
+            "document_number": client_obj.document_number,
+            "birth_date": client_obj.birth_date.isoformat() if client_obj.birth_date else None,
+            "address": client_obj.address,
+            "notes": client_obj.notes,
+            "is_active": client_obj.is_active,
+        },
+        "membership": membership_data,
+        "attendance": enriched_appts,
+        "generated_at": tenant_today(tz).isoformat(),
+    }
+
+
 @router.get("/{client_id}/appointments")
 async def client_appointments(
     client_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
     current_user=Depends(get_current_active_user),
 ):
-    from app.models.appointment import Appointment
-    from app.models.class_session import ClassSession
-    from app.models.class_type import ClassType
-    from app.models.space import Space
-    from app.utils.ownership import get_if_owned
-
     tz = await get_tenant_zoneinfo(db, current_user.tenant_id)
 
     result = await db.execute(
@@ -226,7 +336,6 @@ async def client_appointments(
                 space_name = space.name if space else None
                 if not ct_name:
                     ct_name = space_name
-            # Convertir UTC → hora local del tenant para mostrar
             if session.start_datetime:
                 local_dt = session.start_datetime.astimezone(tz)
                 session_start_local = local_dt.strftime("%Y-%m-%dT%H:%M:%S")

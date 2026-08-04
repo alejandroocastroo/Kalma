@@ -9,8 +9,9 @@ import { Dialog, DialogContent, DialogClose } from '@/components/ui/dialog'
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@/components/ui/table'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ErrorBanner } from '@/components/admin/error-banner'
+import { ClientSummaryCard } from '@/components/admin/client-summary-card'
 import { getInitials, formatDate, formatTime, appointmentStatusConfig } from '@/lib/utils'
-import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X, MapPin } from 'lucide-react'
+import { Search, Plus, ChevronLeft, ChevronRight, Phone, Mail, Edit, Cake, MessageSquare, Check, X, MapPin, LayoutDashboard } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Client } from '@/types'
 
@@ -29,6 +30,7 @@ export default function ClientesPage() {
   const [showForm, setShowForm] = useState(false)
   const [selected, setSelected] = useState<Client | null>(null)
   const [editMode, setEditMode] = useState(false)
+  const [showSummary, setShowSummary] = useState(false)
   const qc = useQueryClient()
 
   // Debounce: evita un request por cada tecla; consulta 300ms tras dejar de escribir
@@ -56,6 +58,12 @@ export default function ClientesPage() {
     queryKey: ['client-appointments', selected?.id],
     queryFn: () => clients.appointments(selected!.id),
     enabled: !!selected,
+  })
+
+  const { data: summaryData, isLoading: summaryLoading } = useQuery({
+    queryKey: ['client-summary', selected?.id],
+    queryFn: () => clients.summary(selected!.id),
+    enabled: !!selected && showSummary,
   })
 
   const saveNoteMutation = useMutation({
@@ -232,9 +240,12 @@ export default function ClientesPage() {
                 )}
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button size="sm" onClick={() => { setEditMode(true); setShowForm(true) }}>
                   <Edit className="w-4 h-4" /> Editar
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setShowSummary(true)}>
+                  <LayoutDashboard className="w-4 h-4" /> Ver resumen
                 </Button>
                 <DialogClose asChild>
                   <Button variant="outline" size="sm">Cerrar</Button>
@@ -253,6 +264,20 @@ export default function ClientesPage() {
             clientId={editMode ? selected?.id : undefined}
             onClose={() => { setShowForm(false); setEditMode(false); qc.invalidateQueries({ queryKey: ['clients'] }); qc.invalidateQueries({ queryKey: ['clients-birthdays'] }) }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Client summary modal */}
+      <Dialog open={showSummary} onOpenChange={(o) => !o && setShowSummary(false)}>
+        <DialogContent title={`Resumen — ${selected?.full_name || ''}`} className="max-w-3xl">
+          {summaryLoading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-sm text-gray-400">Cargando resumen...</div>
+            </div>
+          )}
+          {!summaryLoading && summaryData && (
+            <ClientSummaryCard data={summaryData} onClose={() => setShowSummary(false)} />
+          )}
         </DialogContent>
       </Dialog>
     </div>
