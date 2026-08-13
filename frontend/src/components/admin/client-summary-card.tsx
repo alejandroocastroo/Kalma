@@ -127,7 +127,7 @@ export function ClientSummaryCard({ data, onClose }: { data: ClientSummaryData; 
 
   const { client, membership, attendance } = data
   const attended = attendance.filter(a => a.status === 'attended')
-  const hideExpiryInfo = getTenantSlug() === 'recopilates'
+  const hideExpiryInfo = getTenantSlug() === 'reco-pilates-pedregal'
 
   return (
     <div className="flex flex-col gap-4">
