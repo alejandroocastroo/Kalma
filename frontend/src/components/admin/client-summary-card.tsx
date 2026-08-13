@@ -4,6 +4,7 @@ import { toPng } from 'html-to-image'
 import { Download, Printer } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { getInitials, formatDate } from '@/lib/utils'
+import { getTenantSlug } from '@/lib/auth'
 import { toast } from 'sonner'
 
 const MONTHS_ES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
@@ -126,6 +127,7 @@ export function ClientSummaryCard({ data, onClose }: { data: ClientSummaryData; 
 
   const { client, membership, attendance } = data
   const attended = attendance.filter(a => a.status === 'attended')
+  const hideExpiryInfo = getTenantSlug() === 'recopilates'
 
   return (
     <div className="flex flex-col gap-4">
@@ -267,13 +269,13 @@ export function ClientSummaryCard({ data, onClose }: { data: ClientSummaryData; 
 
                 {/* Dates */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {membership.next_billing_date && (
+                  {membership.next_billing_date && !hideExpiryInfo && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                       <span style={{ color: '#166534' }}>Próximo pago</span>
                       <span style={{ fontWeight: 600, color: '#14532d' }}>{fmtShortDate(membership.next_billing_date)}</span>
                     </div>
                   )}
-                  {membership.expiry_date && (
+                  {membership.expiry_date && !hideExpiryInfo && (
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
                       <span style={{ color: '#166534' }}>Vence</span>
                       <span style={{ fontWeight: 600, color: '#14532d' }}>{fmtShortDate(membership.expiry_date)}</span>
