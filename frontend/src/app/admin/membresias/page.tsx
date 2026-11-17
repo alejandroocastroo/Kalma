@@ -971,6 +971,13 @@ export default function MembresiasPage() {
                 </div>
               )}
 
+              {/* Notas */}
+              {m.notes?.trim() && (
+                <p className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-md px-2 py-1.5 whitespace-pre-line break-words">
+                  {m.notes.trim()}
+                </p>
+              )}
+
               {/* Monthly usage bar (solo para monthly) */}
               {m.status === 'active' && m.membership_type === 'monthly' && <MonthlyUsageBar membershipId={m.id} />}
 
